@@ -1,6 +1,6 @@
 ### ----------------------------------------------------------------------
 ###
-### Copyright (c) 2013 - 2020 Jahred Love and Xirsys LLC <experts@xirsys.com>
+### Copyright (c) 2013 - 2026 Jahred Love and Xirsys LLC <experts@xirsys.com>
 ###
 ### All rights reserved.
 ###
@@ -35,6 +35,22 @@ defmodule Xirsys.Sockets.Telemetry do
   """
 
   require Logger
+
+  alias Xirsys.Sockets.Config
+
+  @doc """
+  Emit a telemetry event when enabled in configuration.
+  """
+  @spec emit(atom(), map(), map()) :: :ok
+  def emit(event_name, measurements, metadata) do
+    if Config.get(:telemetry_enabled, true) do
+      :telemetry.execute([:xturn_sockets, event_name], measurements, metadata)
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  end
 
   @doc """
   Attach telemetry handlers for socket monitoring
@@ -113,6 +129,8 @@ defmodule Xirsys.Sockets.Telemetry do
       active_udp_connections: get_counter(:active_udp_connections),
       active_tcp_connections: get_counter(:active_tcp_connections),
       active_sctp_connections: get_counter(:sctp_connections),
+      messages_sent: get_counter(:messages_sent),
+      packets_processed: get_counter(:packets_processed),
       bytes_sent: get_counter(:bytes_sent),
       bytes_received: get_counter(:bytes_received),
       rate_limit_hits: get_counter(:rate_limit_hits),

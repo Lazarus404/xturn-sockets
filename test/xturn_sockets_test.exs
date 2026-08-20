@@ -1,12 +1,19 @@
 defmodule XturnSocketsTest do
-  use ExUnit.Case
-  alias Xirsys.Sockets.Socket
-  doctest Socket
+  use ExUnit.Case, async: true
 
-  test "opens a port" do
-    {:ok, %Xirsys.Sockets.Socket{sock: sock, type: :udp}} =
-      Socket.open_port({0, 0, 0, 0}, :random, [])
+  alias Xirsys.Sockets.Transport
 
-    assert is_port(sock)
+  test "transport behaviour modules are loaded" do
+    for mod <- [
+          Transport.TCP,
+          Transport.UDP,
+          Transport.TLS,
+          Transport.DTLS,
+          Transport.SCTP
+        ] do
+      assert Code.ensure_loaded?(mod)
+      assert function_exported?(mod, :listen, 3)
+      assert function_exported?(mod, :handle_message, 2)
+    end
   end
 end

@@ -1,6 +1,6 @@
 ### ----------------------------------------------------------------------
 ###
-### Copyright (c) 2013 - 2020 Jahred Love and Xirsys LLC <experts@xirsys.com>
+### Copyright (c) 2013 - 2026 Jahred Love and Xirsys LLC <experts@xirsys.com>
 ###
 ### All rights reserved.
 ###
@@ -22,30 +22,17 @@
 ###
 ### ----------------------------------------------------------------------
 
-defmodule Xirsys.Sockets.SockSupervisor do
-  use Supervisor
-  require Logger
+defmodule Xirsys.Sockets.TierSupervisor.Task do
+  @moduledoc false
 
-  def start_link() do
-    Supervisor.start_link(__MODULE__, [], name: __MODULE__)
-  end
+  alias Xirsys.Sockets.TierSupervisor
 
-  def start_child(sock, cb, ssl) do
-    spec = %{
-      id: Xirsys.Sockets.Client,
-      start: {Xirsys.Sockets.Client, :start_link, [sock, cb, ssl]},
-      restart: :temporary
-    }
+  def start_link(opts \\ []) do
+    max_children = Keyword.get(opts, :max_children, :infinity)
 
-    Supervisor.start_child(__MODULE__, spec)
-  end
-
-  def terminate_child(child) do
-    Supervisor.terminate_child(__MODULE__, child)
-  end
-
-  def init([]) do
-    children = []
-    Supervisor.init(children, strategy: :simple_one_for_one)
+    TierSupervisor.start_link(
+      name: __MODULE__,
+      max_children: max_children
+    )
   end
 end

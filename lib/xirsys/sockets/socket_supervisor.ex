@@ -1,6 +1,6 @@
 ### ----------------------------------------------------------------------
 ###
-### Copyright (c) 2013 - 2020 Jahred Love and Xirsys LLC <experts@xirsys.com>
+### Copyright (c) 2013 - 2026 Jahred Love and Xirsys LLC <experts@xirsys.com>
 ###
 ### All rights reserved.
 ###
@@ -22,20 +22,27 @@
 ###
 ### ----------------------------------------------------------------------
 
-defmodule Xirsys.Sockets.Response do
+defmodule Xirsys.Sockets.SockSupervisor do
   @moduledoc """
-  TURN connection object
+  Dynamic supervisor for connection processes.
   """
+  use DynamicSupervisor
 
-  defstruct class: nil,
-            attrs: nil,
-            err_no: nil,
-            message: nil
+  alias Xirsys.Sockets.Connection
 
-  @type t :: {
-          class :: atom(),
-          attrs :: map(),
-          err_no :: term(),
-          message :: String.t()
-        }
+  def start_link(opts \\ []) do
+    name = Keyword.get(opts, :name, __MODULE__)
+    DynamicSupervisor.start_link(__MODULE__, opts, name: name)
+  end
+
+  @spec start_connection(keyword()) :: DynamicSupervisor.on_start_child()
+  def start_connection(opts) do
+    spec = {Connection, opts}
+    DynamicSupervisor.start_child(__MODULE__, spec)
+  end
+
+  @impl true
+  def init(_opts) do
+    DynamicSupervisor.init(strategy: :one_for_one)
+  end
 end
