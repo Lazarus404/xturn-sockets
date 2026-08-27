@@ -24,22 +24,60 @@
 
 defmodule Xirsys.Sockets.Handler do
   @moduledoc """
-  Business logic callback for a single framing tier.
+  Business logic for one pipeline tier.
+
+  `handle_packet/4` is required. `handle_connect/1` and `handle_disconnect/2`
+  are optional.
+
+  Return values from `handle_packet/4`:
+
+    * `{:ok, state}` - packet consumed, no reply
+    * `{:reply, iodata(), state}` - send `iodata` on the same connection
+    * `{:descend, tier, payload, state}` - push `payload` into another named tier
+    * `{:close, state}` - stop the connection after this packet
   """
 
   alias Xirsys.Sockets.Conn
 
+  @typedoc "Opaque handler state, returned from `handle_connect/1` or `handle_packet/4`."
   @type state :: term()
+
+  @typedoc "Packet metadata from the accumulator (`:from`, `:received_at`, …)."
   @type meta :: map()
 
+  @doc """
+  Called once when a stream connection is accepted (not used on stateless UDP).
+
+  ## Parameters
+
+    * `conn` - transport context (`Xirsys.Sockets.Conn`)
+  """
   @callback handle_connect(Conn.t()) :: {:ok, state()}
 
+  @doc """
+  Handles one whole packet from this tier's accumulator.
+
+  ## Parameters
+
+    * `packet` - framed payload (header stripped for length-prefixed tiers)
+    * `meta` - accumulator metadata for this packet
+    * `conn` - connection context (addresses, socket, assigns)
+    * `state` - previous handler state
+  """
   @callback handle_packet(binary(), meta(), Conn.t(), state()) ::
               {:ok, state()}
               | {:reply, iodata(), state()}
               | {:descend, atom(), binary(), state()}
               | {:close, state()}
 
+  @doc """
+  Called when the connection process exits.
+
+  ## Parameters
+
+    * `reason` - exit reason (`:normal`, `:tcp_closed`, …)
+    * `state` - last handler state
+  """
   @callback handle_disconnect(term(), state()) :: :ok
 
   @optional_callbacks handle_connect: 1, handle_disconnect: 2

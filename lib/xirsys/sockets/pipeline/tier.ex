@@ -23,7 +23,19 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.Pipeline.Tier do
-  @moduledoc false
+  @moduledoc """
+  One compiled pipeline tier: accumulator, handler, and dispatch strategy.
+
+      iex> tier = %Xirsys.Sockets.Pipeline.Tier{
+      ...>   accumulator: Xirsys.Sockets.Accumulator.Raw,
+      ...>   accumulator_opts: [],
+      ...>   handler: :my_handler
+      ...> }
+      iex> tier.dispatch
+      :inline
+      iex> tier.pool_size
+      nil
+  """
 
   @enforce_keys [:accumulator, :accumulator_opts, :handler]
   defstruct [
@@ -36,6 +48,15 @@ defmodule Xirsys.Sockets.Pipeline.Tier do
     pool_supervisor: Xirsys.Sockets.TierSupervisor.Pool
   ]
 
+  @typedoc """
+  Runtime tier record.
+
+    * `accumulator` / `accumulator_opts` - framing module and its `init/1` opts
+    * `handler` - `Xirsys.Sockets.Handler` implementation
+    * `dispatch` - `:inline` (same process), `:task`, or `:pool`
+    * `pool_size` - max pool children when `dispatch: :pool` (`nil` uses config)
+    * `task_supervisor` / `pool_supervisor` - named DynamicSupervisors
+  """
   @type t :: %__MODULE__{
           accumulator: module(),
           accumulator_opts: keyword(),

@@ -24,21 +24,38 @@
 
 defmodule Xirsys.Sockets.SockSupervisor do
   @moduledoc """
-  Dynamic supervisor for connection processes.
+  Dynamic supervisor for `Connection` processes.
+
+  Start this before `Acceptor`. Tests typically call `start_link/0` once.
   """
   use DynamicSupervisor
 
   alias Xirsys.Sockets.Connection
 
+  @doc """
+  Starts the named connection supervisor.
+
+  ## Parameters
+
+    * `opts` - `:name` (default `Xirsys.Sockets.SockSupervisor`)
+  """
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
     DynamicSupervisor.start_link(__MODULE__, opts, name: name)
   end
 
-  @spec start_connection(keyword()) :: DynamicSupervisor.on_start_child()
-  def start_connection(opts) do
+  @doc """
+  Starts one `Connection` child under `supervisor`.
+
+  ## Parameters
+
+    * `supervisor` - registered name or pid (default `Xirsys.Sockets.SockSupervisor`)
+    * `opts` - forwarded to `Connection.start_link/1`
+  """
+  @spec start_connection(atom() | pid(), keyword()) :: DynamicSupervisor.on_start_child()
+  def start_connection(supervisor \\ __MODULE__, opts) do
     spec = {Connection, opts}
-    DynamicSupervisor.start_child(__MODULE__, spec)
+    DynamicSupervisor.start_child(supervisor, spec)
   end
 
   @impl true

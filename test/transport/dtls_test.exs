@@ -20,16 +20,29 @@ defmodule XturnSockets.DTLSTest do
 
   test "listen without certificates returns error" do
     Application.delete_env(:xturn, :certs)
+    Application.delete_env(:certs, :certs)
     assert {:error, :no_certificates_configured} = DTLS.listen(@test_ip, 0, [])
+  end
+
+  test "listen with certs only in opts does not require application env" do
+    {certfile, keyfile} = generate_self_signed_cert!()
+
+    Application.delete_env(:xturn, :certs)
+    Application.delete_env(:certs, :certs)
+
+    assert {:ok, sock} =
+             DTLS.listen(@test_ip, 0, certfile: certfile, keyfile: keyfile, verify: :verify_none)
+
+    :ssl.close(sock)
   end
 
   test "listen uses DTLS versions even when ssl_options specifies TLS versions" do
     {certfile, keyfile} = generate_self_signed_cert!()
 
-    Application.put_env(:xturn_sockets, :ssl_options, [
+    Application.put_env(:xturn_sockets, :ssl_options,
       versions: [~c"tlsv1.2", ~c"tlsv1.3"],
       verify: :verify_none
-    ])
+    )
 
     Application.put_env(:xturn, :certs, certfile: certfile, keyfile: keyfile)
 

@@ -24,8 +24,10 @@
 
 defmodule Xirsys.Sockets.Connection do
   @moduledoc """
-  Per-connection process that owns accumulator state across reads and fully drains
-  after each inbound chunk.
+  Per-connection process: owns accumulator state and fully drains after each read.
+
+  Started by `Acceptor` via `SockSupervisor`. One process per accepted stream
+  (TCP/TLS). Datagrams use `DatagramServer` instead.
   """
   use GenServer
 
@@ -33,10 +35,32 @@ defmodule Xirsys.Sockets.Connection do
 
   @active_opts [:binary, active: :once]
 
+  @doc """
+  Starts a connection process for an already-accepted `socket`.
+
+  ## Parameters
+
+  `opts` is a keyword list:
+
+    * `:transport` - `Xirsys.Sockets.Transport` module (required)
+    * `:socket` - accepted client socket (required)
+    * `:pipeline` - pipeline module, or omit and pass `:accumulator` + `:handler`
+    * `:listener` - acceptor pid
+    * `:assigns` - map copied onto `Conn`
+    * `:handler_state` - initial handler state when `handle_connect/1` is absent
+    * `:tick_interval_ms` - optional drain tick for reorder timeouts
+  """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
+  @doc """
+  Temporary child spec so a dead connection is not restarted.
+
+  ## Parameters
+
+    * `opts` - same keyword list as `start_link/1`
+  """
   def child_spec(opts) do
     %{
       id: {__MODULE__, opts},
@@ -176,8 +200,14 @@ defmodule Xirsys.Sockets.Connection do
         safe_disconnect_all(state.pipeline, state.states, reason)
         {:stop, reason, state}
 
+      {:icmp, _} ->
+        rearm(state, :ok)
+
       :ignore ->
-        {:noreply, state}
+        rearm(state, :ok)
+
+      _ ->
+        rearm(state, :ok)
     end
   end
 

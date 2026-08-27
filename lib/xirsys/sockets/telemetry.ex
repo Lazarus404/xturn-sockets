@@ -24,14 +24,11 @@
 
 defmodule Xirsys.Sockets.Telemetry do
   @moduledoc """
-  Telemetry handlers for monitoring TURN server socket performance
+  Optional `:telemetry` events under `[:xturn_sockets, event]`.
 
-  This module provides comprehensive monitoring for:
-  - Connection metrics
-  - Data transfer rates
-  - Error rates
-  - Rate limiting events
-  - SSL/TLS handshake performance
+  `emit/3` no-ops when `config :xturn_sockets, telemetry_enabled: false`, and
+  swallows errors if `:telemetry` is not started. `attach_handlers/0` installs
+  library log/counter handlers; callers may attach their own instead.
   """
 
   require Logger
@@ -39,7 +36,16 @@ defmodule Xirsys.Sockets.Telemetry do
   alias Xirsys.Sockets.Config
 
   @doc """
-  Emit a telemetry event when enabled in configuration.
+  Executes `[:xturn_sockets, event_name]` when telemetry is enabled.
+
+  ## Parameters
+
+    * `event_name` - last segment of the event name (atom)
+    * `measurements` - numeric map (`%{bytes: n}`, …)
+    * `metadata` - context map (`%{ip: tuple, port: n}`, …)
+
+      iex> Xirsys.Sockets.Telemetry.emit(:doctest_event, %{count: 1}, %{})
+      :ok
   """
   @spec emit(atom(), map(), map()) :: :ok
   def emit(event_name, measurements, metadata) do
@@ -53,7 +59,9 @@ defmodule Xirsys.Sockets.Telemetry do
   end
 
   @doc """
-  Attach telemetry handlers for socket monitoring
+  Attaches library log and counter handlers for `[:xturn_sockets, ...]` events.
+
+  Idempotent per handler id. Safe to call from a host application's start.
   """
   def attach_handlers() do
     handlers = [
@@ -110,7 +118,7 @@ defmodule Xirsys.Sockets.Telemetry do
   end
 
   @doc """
-  Detach all telemetry handlers
+  Detaches every handler whose id starts with `"xturn_sockets_"`.
   """
   def detach_handlers() do
     :telemetry.list_handlers([])
@@ -121,7 +129,10 @@ defmodule Xirsys.Sockets.Telemetry do
   end
 
   @doc """
-  Get current socket metrics
+  Snapshot of process-local counters kept in `:persistent_term`.
+
+  Keys include connection counts, bytes sent/received, rate-limit hits, and
+  SSL handshake totals. `last_updated` is `System.system_time(:second)`.
   """
   def get_metrics() do
     %{
@@ -180,7 +191,8 @@ defmodule Xirsys.Sockets.Telemetry do
     increment_counter(:"#{protocol}_bytes_sent", bytes)
 
     # Track high bandwidth usage
-    if bytes > 1024 * 1024 do  # > 1MB
+    # > 1MB
+    if bytes > 1024 * 1024 do
       Logger.debug("Large message sent: #{bytes} bytes via #{protocol}", metadata)
     end
   end
@@ -314,16 +326,26 @@ defmodule Xirsys.Sockets.Telemetry do
   end
 
   @doc """
-  Reset all counters (useful for testing)
+  Erases this module's `:persistent_term` counters.
+
+      iex> Xirsys.Sockets.Telemetry.reset_counters()
+      :ok
   """
   def reset_counters() do
-    :persistent_term.get()
-    |> Enum.filter(fn {{module, _key}, _value} -> module == __MODULE__ end)
-    |> Enum.each(fn {key, _value} -> :persistent_term.erase(key) end)
+    mod = __MODULE__
+
+    for {key, _} <- :persistent_term.get(),
+        match?({^mod, _}, key),
+        do: :persistent_term.erase(key)
+
+    :ok
   end
 
   @doc """
-  Get health status based on error rates
+  Coarse health atom from current counters.
+
+  Returns `:healthy`, `:degraded` (SSL error rate), `:unhealthy` (send error
+  rate), or `:under_attack` (rate-limit hits).
   """
   def health_status() do
     metrics = get_metrics()
@@ -332,9 +354,12 @@ defmodule Xirsys.Sockets.Telemetry do
     ssl_error_rate = safe_divide(metrics.ssl_handshake_errors, metrics.ssl_handshake_successes)
 
     cond do
-      error_rate > 0.1 -> :unhealthy  # > 10% error rate
-      ssl_error_rate > 0.2 -> :degraded  # > 20% SSL error rate
-      metrics.rate_limit_hits > 100 -> :under_attack  # High rate limiting
+      # > 10% error rate
+      error_rate > 0.1 -> :unhealthy
+      # > 20% SSL error rate
+      ssl_error_rate > 0.2 -> :degraded
+      # High rate limiting
+      metrics.rate_limit_hits > 100 -> :under_attack
       true -> :healthy
     end
   end

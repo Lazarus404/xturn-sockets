@@ -13,7 +13,10 @@ defmodule XturnSockets.PipelineTest do
   test "resolve/1 from compiled pipeline module" do
     pipeline = Pipeline.resolve(TwoTierPipeline)
     assert Map.keys(pipeline.tiers) == [:root, :inner]
-    assert Pipeline.tier_spec(pipeline, :root).accumulator == Xirsys.Sockets.Accumulator.LengthPrefixed
+
+    assert Pipeline.tier_spec(pipeline, :root).accumulator ==
+             Xirsys.Sockets.Accumulator.LengthPrefixed
+
     assert Pipeline.tier_spec(pipeline, :inner).accumulator == Raw
     assert Pipeline.tier_spec(pipeline, :inner).dispatch == :inline
   end

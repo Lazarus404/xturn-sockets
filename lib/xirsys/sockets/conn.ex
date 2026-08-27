@@ -25,8 +25,26 @@
 defmodule Xirsys.Sockets.Conn do
   @moduledoc """
   Transport-level connection context passed to handlers.
+
+  Built by `Connection` (streams) or `DatagramServer` (datagrams). Handlers
+  read addresses and `assigns`; they do not own the socket.
+
+      iex> conn = %Xirsys.Sockets.Conn{client_ip: {127, 0, 0, 1}, client_port: 3478}
+      iex> conn.client_port
+      3478
+      iex> conn.assigns
+      %{}
   """
 
+  @typedoc """
+  Connection context.
+
+    * `listener` - `Acceptor` / `DatagramServer` pid, if any
+    * `socket` - opaque transport socket
+    * `client_ip` / `client_port` - peer (updated per datagram on UDP)
+    * `server_ip` / `server_port` - local bind address
+    * `assigns` - caller-supplied map, unchanged by the engine
+  """
   @type t :: %__MODULE__{
           listener: pid() | nil,
           socket: term(),

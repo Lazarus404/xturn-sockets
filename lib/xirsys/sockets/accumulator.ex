@@ -26,23 +26,59 @@ defmodule Xirsys.Sockets.Accumulator do
   @moduledoc """
   Per-tier packet framing state machine.
 
+  Built-in implementations: `Xirsys.Sockets.Accumulator.Raw`,
+  `Xirsys.Sockets.Accumulator.LengthPrefixed`, and
+  `Xirsys.Sockets.Accumulator.Reorder`.
+
   ## Bounded buffers
 
-  Every `Accumulator` implementation should support a `:max_size` option limiting
-  how much data or how many whole packets may be held before signalling overflow.
-  Because `push/3` returns only `acc()`, implementations typically record overflow
-  during `push/3` (for example by dropping the oldest entry and setting a flag) and
-  surface it once from the next `pop/1` as `{:error, :buffer_overflow, acc}`. The
-  engine logs `:frame_error` telemetry and continues draining after overflow.
+  Every implementation should accept a `:max_size` option that limits how much
+  data or how many whole packets may be held. Because `push/3` returns only
+  `acc()`, overflow is typically recorded during `push/3` (drop oldest, set a
+  flag) and surfaced once from the next `pop/1` as
+  `{:error, :buffer_overflow, acc}`. The engine emits `:frame_error` telemetry
+  and continues draining after overflow.
   """
 
+  @typedoc "Opaque accumulator state. Shape is private to the implementation."
   @type acc :: term()
+
+  @typedoc "Per-packet metadata merged across `push/3` calls until a packet is popped."
   @type meta :: map()
 
+  @doc """
+  Builds initial accumulator state.
+
+  ## Parameters
+
+    * `opts` - implementation-specific keyword list (`:max_size`, `:header_size`, …)
+  """
   @callback init(keyword()) :: acc()
 
+  @doc """
+  Appends `chunk` and `meta` to the accumulator. Does not extract packets.
+
+  ## Parameters
+
+    * `acc` - current state from `init/1` or a previous `push/3` / `pop/1`
+    * `chunk` - inbound bytes (one datagram, or a stream read)
+    * `meta` - metadata merged into the next popped packet
+  """
   @callback push(acc(), binary(), meta()) :: acc()
 
+  @doc """
+  Extracts one whole packet, or reports that more data is needed.
+
+  ## Parameters
+
+    * `acc` - current state
+
+  ## Returns
+
+    * `{:ok, packet, meta, acc}` - one complete packet
+    * `{:more, acc}` - incomplete; wait for another `push/3`
+    * `{:error, reason, acc}` - framing error (`:buffer_overflow`, …); drain continues
+  """
   @callback pop(acc()) ::
               {:ok, binary(), meta(), acc()}
               | {:more, acc()}

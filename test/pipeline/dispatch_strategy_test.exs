@@ -2,7 +2,12 @@ defmodule XturnSockets.DispatchStrategyTest do
   use ExUnit.Case, async: true
 
   alias Xirsys.Sockets.{Acceptor, Transport.TCP}
-  alias XturnSockets.PipelineSupport.{ScratchPoolSupervisor, IsolatedPoolPipeline, IsolatedTaskPipeline}
+
+  alias XturnSockets.PipelineSupport.{
+    ScratchPoolSupervisor,
+    IsolatedPoolPipeline,
+    IsolatedTaskPipeline
+  }
 
   @test_ip {127, 0, 0, 1}
 
@@ -75,7 +80,9 @@ defmodule XturnSockets.DispatchStrategyTest do
     {:ok, agent} = XturnSockets.TestSupport.start_collector()
 
     ref =
-      :telemetry_test.attach_event_handlers(self(), [[:xturn_sockets, :tier_supervisor_unavailable]])
+      :telemetry_test.attach_event_handlers(self(), [
+        [:xturn_sockets, :tier_supervisor_unavailable]
+      ])
 
     # ScratchTaskSupervisor is deliberately never started for this pipeline, so
     # Engine hits the {:error, :no_supervisor} path without touching the

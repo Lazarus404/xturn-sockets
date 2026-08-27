@@ -24,7 +24,10 @@
 
 defmodule Xirsys.Sockets.DatagramServer do
   @moduledoc """
-  Plain-UDP listener that drains every whole packet from each datagram independently.
+  Datagram listener that drains every whole packet from each inbound datagram.
+
+  Default transport is `Transport.UDP`. Multi-tier pipelines can keep per-peer
+  session state; otherwise each datagram is framed independently.
   """
   use GenServer
   require Logger
@@ -42,10 +45,33 @@ defmodule Xirsys.Sockets.DatagramServer do
   # reclaimed by the next sweep instead of leaking.
   @min_last_seen -9_223_372_036_854_775_808
 
+  @doc """
+  Opens a datagram listener.
+
+  ## Parameters
+
+  `opts` is a keyword list:
+
+    * `:ip` / `:port` - bind address (required)
+    * `:transport` - transport module (default `Transport.UDP`)
+    * `:pipeline` - pipeline module, or omit and pass `:accumulator` + `:handler`
+    * `:listen_opts` - extra options forwarded to `listen/3`
+    * `:assigns` - map copied onto each datagram's `Conn`
+    * `:handler_state` - initial handler state for stateless datagrams
+    * `:tick_interval_ms` - optional drain tick (also enables per-peer sessions
+      when the pipeline has more than `:root`)
+  """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
+  @doc """
+  Bound port of a running server (useful when `:port` was `0`).
+
+  ## Parameters
+
+    * `pid` - server pid from `start_link/1`
+  """
   def port(pid), do: GenServer.call(pid, :port)
 
   @impl true
@@ -178,7 +204,10 @@ defmodule Xirsys.Sockets.DatagramServer do
               case Map.fetch(sessions, peer) do
                 {:ok, %{tier_sessions: tier_sessions} = entry} ->
                   if Map.get(tier_sessions, tier) == pid do
-                    Map.put(sessions, peer, %{entry | tier_sessions: Map.delete(tier_sessions, tier)})
+                    Map.put(sessions, peer, %{
+                      entry
+                      | tier_sessions: Map.delete(tier_sessions, tier)
+                    })
                   else
                     sessions
                   end
@@ -280,7 +309,10 @@ defmodule Xirsys.Sockets.DatagramServer do
       |> monitor_new_tier_sessions(peer, tier_sessions, prior_tier_sessions)
       |> then(fn state ->
         if state.sessions do
-          %{state | sessions: Map.put(sessions, peer, new_entry(accs, states, tier_sessions, now))}
+          %{
+            state
+            | sessions: Map.put(sessions, peer, new_entry(accs, states, tier_sessions, now))
+          }
         else
           state
         end
@@ -301,7 +333,9 @@ defmodule Xirsys.Sockets.DatagramServer do
   end
 
   defp refresh_root_acc(pipeline, accs, states, tier_sessions) do
-    %Tier{accumulator: root_mod, accumulator_opts: root_opts} = Pipeline.tier_spec(pipeline, :root)
+    %Tier{accumulator: root_mod, accumulator_opts: root_opts} =
+      Pipeline.tier_spec(pipeline, :root)
+
     {Map.put(accs, :root, root_mod.init(root_opts)), states, tier_sessions}
   end
 

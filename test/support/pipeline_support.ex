@@ -31,42 +31,48 @@ defmodule XturnSockets.PipelineSupport do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: {LengthPrefixed, header_size: 2},
       handler: XturnSockets.PipelineSupport.DescendRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler
+    )
   end
 
   defmodule AsyncTwoTierPipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: {LengthPrefixed, header_size: 2},
       handler: XturnSockets.PipelineSupport.DescendRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler,
       dispatch: :task
+    )
   end
 
   defmodule PoolTwoTierPipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: {LengthPrefixed, header_size: 2},
       handler: XturnSockets.PipelineSupport.DescendRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler,
       dispatch: :pool,
       pool_size: 1
+    )
   end
 
   defmodule ScratchTaskSupervisor do
@@ -104,15 +110,17 @@ defmodule XturnSockets.PipelineSupport do
     """
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: {LengthPrefixed, header_size: 2},
       handler: XturnSockets.PipelineSupport.DescendRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler,
       dispatch: :task,
       task_supervisor: XturnSockets.PipelineSupport.ScratchTaskSupervisor
+    )
   end
 
   defmodule IsolatedPoolPipeline do
@@ -123,61 +131,70 @@ defmodule XturnSockets.PipelineSupport do
     """
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: {LengthPrefixed, header_size: 2},
       handler: XturnSockets.PipelineSupport.DescendRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler,
       dispatch: :pool,
       pool_size: 1,
       pool_supervisor: XturnSockets.PipelineSupport.ScratchPoolSupervisor
+    )
   end
 
   defmodule AsyncClosePipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CloseRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CloseInnerHandler,
       dispatch: :task
+    )
   end
 
   defmodule InnerCloseSessionPipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CloseInnerHandler,
       dispatch: :task
+    )
   end
 
   defmodule ThreeTierPipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.RootRelayHandler
+    )
 
-    tier :middle,
+    tier(:middle,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.MiddleRelayHandler
+    )
 
-    tier :leaf,
+    tier(:leaf,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.LeafCollectHandler
+    )
   end
 
   defmodule DescendRootHandler do
@@ -277,35 +294,40 @@ defmodule XturnSockets.PipelineSupport do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CrashRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CrashInnerHandler
+    )
   end
 
   defmodule ClosePipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CloseRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.CloseInnerHandler
+    )
   end
 
   defmodule RootOnlyPipeline do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler
+    )
   end
 
   defmodule PoisonAccumulator do
@@ -362,13 +384,15 @@ defmodule XturnSockets.PipelineSupport do
     @moduledoc false
     use Xirsys.Sockets.Pipeline
 
-    tier :root,
+    tier(:root,
       accumulator: Raw,
       handler: XturnSockets.PipelineSupport.PoisonRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: XturnSockets.PipelineSupport.PoisonAccumulator,
       handler: XturnSockets.PipelineSupport.InnerCollectHandler
+    )
   end
 
   defmodule SeqRootHandler do
@@ -388,16 +412,17 @@ defmodule XturnSockets.PipelineSupport do
 
     alias Xirsys.Sockets.Accumulator.{Raw, Reorder}
 
-    tier :root,
+    tier(:root,
       accumulator: {Xirsys.Sockets.Accumulator.LengthPrefixed, header_size: 2},
       handler: XturnSockets.PipelineSupport.SeqRootHandler
+    )
 
-    tier :inner,
+    tier(:inner,
       accumulator: {
         Reorder,
-        inner: Raw,
-        key_fun: fn packet, _meta -> :binary.at(packet, 0) end
+        inner: Raw, key_fun: fn packet, _meta -> :binary.at(packet, 0) end
       },
       handler: XturnSockets.PipelineSupport.InnerCollectHandler
+    )
   end
 end

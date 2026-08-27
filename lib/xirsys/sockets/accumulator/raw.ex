@@ -24,16 +24,32 @@
 
 defmodule Xirsys.Sockets.Accumulator.Raw do
   @moduledoc """
-  No framing: each `push/3` produces one immediately poppable packet.
+  No framing: each `push/3` is one immediately poppable packet.
 
   ## Options
 
     * `:max_size` - maximum queued whole packets (default: `1024`)
+
+  Overflow drops the oldest packet and surfaces `:buffer_overflow` on the next
+  `pop/1`, then draining continues.
   """
   @behaviour Xirsys.Sockets.Accumulator
 
   @default_max 1024
 
+  @doc """
+  Builds an empty packet queue.
+
+  ## Parameters
+
+    * `opts` - `:max_size` (default `1024`)
+
+      iex> acc = Xirsys.Sockets.Accumulator.Raw.init([])
+      iex> acc = Xirsys.Sockets.Accumulator.Raw.push(acc, "hello", %{n: 1})
+      iex> {:ok, "hello", %{n: 1}, acc} = Xirsys.Sockets.Accumulator.Raw.pop(acc)
+      iex> elem(Xirsys.Sockets.Accumulator.Raw.pop(acc), 0)
+      :more
+  """
   @impl true
   def init(opts) do
     %{
@@ -43,6 +59,15 @@ defmodule Xirsys.Sockets.Accumulator.Raw do
     }
   end
 
+  @doc """
+  Enqueues `chunk` as one packet. Drops the oldest entry when over `:max_size`.
+
+  ## Parameters
+
+    * `acc` - state from `init/1`
+    * `chunk` - the whole packet
+    * `meta` - metadata returned with this packet from `pop/1`
+  """
   @impl true
   def push(%{queue: queue, max_size: max_size} = acc, chunk, meta) do
     queue = :queue.in({chunk, meta}, queue)
@@ -55,6 +80,13 @@ defmodule Xirsys.Sockets.Accumulator.Raw do
     end
   end
 
+  @doc """
+  Dequeues one packet, reports overflow, or returns `{:more, acc}` when empty.
+
+  ## Parameters
+
+    * `acc` - state after `push/3`
+  """
   @impl true
   def pop(%{overflow: true} = acc) do
     {:error, :buffer_overflow, %{acc | overflow: false}}

@@ -23,7 +23,14 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.Transport.DTLS do
-  @moduledoc false
+  @moduledoc """
+  DTLS datagram transport. Delegates to `Transport.TLS` with `protocol: :dtls`.
+
+      iex> Xirsys.Sockets.Transport.DTLS.framing()
+      :datagram
+      iex> Xirsys.Sockets.Transport.DTLS.handle_message({:ssl, :port, "hi"}, :sock)
+      {:data, "hi", nil}
+  """
   @behaviour Xirsys.Sockets.Transport
 
   alias Xirsys.Sockets.Transport.TLS

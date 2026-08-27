@@ -23,10 +23,21 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.TierSupervisor.Pool do
-  @moduledoc false
+  @moduledoc """
+  Named pool supervisor for `dispatch: :pool` tiers.
+
+  Caps children at `Config.tier_pool_size/0` unless `:max_children` is passed.
+  """
 
   alias Xirsys.Sockets.{Config, TierSupervisor}
 
+  @doc """
+  Starts `TierSupervisor` registered as this module.
+
+  ## Parameters
+
+    * `opts` - `:max_children` override
+  """
   def start_link(opts \\ []) do
     max_children = Keyword.get(opts, :max_children, Config.tier_pool_size())
 

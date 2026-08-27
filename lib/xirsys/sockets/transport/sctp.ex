@@ -23,7 +23,19 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.Transport.SCTP do
-  @moduledoc false
+  @moduledoc """
+  SCTP transport (`:gen_sctp`) when the OTP driver is available.
+
+  `accept/2` returns `{:error, :sctp_not_supported}`: associations arrive as
+  messages on the listen socket and cannot be driven by `Acceptor`'s accept loop.
+
+      iex> Xirsys.Sockets.Transport.SCTP.framing()
+      :datagram
+      iex> Xirsys.Sockets.Transport.SCTP.handle_message({:sctp, :sock, {127, 0, 0, 1}, 9, [], "hi"}, :sock)
+      {:data, "hi", {{127, 0, 0, 1}, 9}}
+      iex> Xirsys.Sockets.Transport.SCTP.handle_message({:sctp_closed, :sock}, :sock)
+      {:closed, :normal}
+  """
   @behaviour Xirsys.Sockets.Transport
 
   alias Xirsys.Sockets.{Config, Telemetry}

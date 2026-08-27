@@ -23,10 +23,19 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.TierSupervisor.Task do
-  @moduledoc false
+  @moduledoc """
+  Named supervisor for `dispatch: :task` tiers (unbounded by default).
+  """
 
   alias Xirsys.Sockets.TierSupervisor
 
+  @doc """
+  Starts `TierSupervisor` registered as this module.
+
+  ## Parameters
+
+    * `opts` - `:max_children` (default `:infinity`)
+  """
   def start_link(opts \\ []) do
     max_children = Keyword.get(opts, :max_children, :infinity)
 

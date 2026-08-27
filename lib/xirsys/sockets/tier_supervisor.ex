@@ -24,18 +24,33 @@
 
 defmodule Xirsys.Sockets.TierSupervisor do
   @moduledoc """
-  Dynamic supervisor for async tier session workers.
+  Dynamic supervisor for async pipeline tier sessions (`dispatch: :task` / `:pool`).
   """
   use DynamicSupervisor
 
   alias Xirsys.Sockets.TierSession
 
+  @doc """
+  Starts a named supervisor for tier session workers.
+
+  ## Parameters
+
+    * `opts` - `:name` (required), `:max_children` (default `:infinity`)
+  """
   def start_link(opts) do
     name = Keyword.fetch!(opts, :name)
     max_children = Keyword.get(opts, :max_children, :infinity)
     DynamicSupervisor.start_link(__MODULE__, max_children, name: name)
   end
 
+  @doc """
+  Starts one `TierSession` under `supervisor`.
+
+  ## Parameters
+
+    * `supervisor` - registered name or pid
+    * `opts` - forwarded to `TierSession.start_link/1`
+  """
   @spec start_session(atom(), keyword()) :: DynamicSupervisor.on_start_child()
   def start_session(supervisor, opts) do
     spec = {TierSession, opts}

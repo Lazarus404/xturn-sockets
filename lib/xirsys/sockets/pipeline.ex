@@ -37,15 +37,27 @@ defmodule Xirsys.Sockets.Pipeline do
         handler: MyApp.Handlers.Inner,
         dispatch: :pool,
         pool_size: 8
+
+  Every pipeline must declare `:root`. Duplicate tier names fail at compile time.
+
+  `Acceptor` / `DatagramServer` also accept the legacy `{accumulator, handler}`
+  pair, which `resolve/1` turns into a single-tier pipeline.
   """
 
   alias Xirsys.Sockets.{Config, Conn, Pipeline.Tier, Spec}
 
   defstruct tiers: nil
 
+  @typedoc "Compiled pipeline: a map of tier name to `Pipeline.Tier`."
   @type t :: %__MODULE__{tiers: %{atom() => Tier.t()}}
 
-  @doc false
+  @doc """
+  Imports `tier/2` and compiles `__tiers__/0` / `__tier_spec__/1`.
+
+  ## Parameters
+
+    * `_opts` - unused; reserved for future `use` options
+  """
   defmacro __using__(_opts) do
     quote do
       @pipeline_tiers []
@@ -54,7 +66,16 @@ defmodule Xirsys.Sockets.Pipeline do
     end
   end
 
-  @doc false
+  @doc """
+  Declares one named tier on the using module.
+
+  ## Parameters
+
+    * `name` - atom key (`:root` is required on every pipeline)
+    * `opts` - `:accumulator` and `:handler` (required); optional `:dispatch`
+      (`:inline` | `:task` | `:pool`), `:pool_size`, `:task_supervisor`,
+      `:pool_supervisor`
+  """
   defmacro tier(name, opts) do
     quote do
       @pipeline_tiers @pipeline_tiers ++ [unquote(name)]
@@ -86,18 +107,18 @@ defmodule Xirsys.Sockets.Pipeline do
 
     unless :root in tiers do
       raise CompileError,
-            description: "pipeline must declare a :root tier",
-            file: env.file,
-            line: env.line
+        description: "pipeline must declare a :root tier",
+        file: env.file,
+        line: env.line
     end
 
     duplicates = tiers -- Enum.uniq(tiers)
 
     unless duplicates == [] do
       raise CompileError,
-            description: "duplicate pipeline tier #{inspect(hd(duplicates))}",
-            file: env.file,
-            line: env.line
+        description: "duplicate pipeline tier #{inspect(hd(duplicates))}",
+        file: env.file,
+        line: env.line
     end
 
     quote do
@@ -106,8 +127,23 @@ defmodule Xirsys.Sockets.Pipeline do
   end
 
   @doc """
-  Resolves a compiled pipeline module or legacy `{accumulator, handler}` sugar
-  into a runtime `%Pipeline{}` struct.
+  Resolves a compiled pipeline module or `{accumulator, handler}` sugar
+  into a runtime `%Pipeline{}`.
+
+  ## Parameters
+
+    * `pipeline` - a module that `use`s this one, or `{accumulator_spec, handler_mod}`
+
+      iex> p = Xirsys.Sockets.Pipeline.resolve({Xirsys.Sockets.Accumulator.Raw, :handler})
+      iex> Xirsys.Sockets.Pipeline.multi_tier?(p)
+      false
+      iex> spec = Xirsys.Sockets.Pipeline.tier_spec(p, :root)
+      iex> spec.accumulator
+      Xirsys.Sockets.Accumulator.Raw
+      iex> spec.handler
+      :handler
+      iex> spec.dispatch
+      :inline
   """
   @spec resolve(module() | {Spec.spec(), module()}) :: t()
   def resolve(pipeline_mod) when is_atom(pipeline_mod) do
@@ -138,7 +174,14 @@ defmodule Xirsys.Sockets.Pipeline do
   end
 
   @doc """
-  Returns the `%Pipeline.Tier{}` specification for a tier key.
+  Returns the `%Pipeline.Tier{}` for `key`.
+
+  Raises if `key` was not declared.
+
+  ## Parameters
+
+    * `pipeline` - struct from `resolve/1`
+    * `key` - tier name (`:root`, …)
   """
   @spec tier_spec(t(), atom()) :: Tier.t()
   def tier_spec(%__MODULE__{tiers: tiers}, key) do
@@ -146,13 +189,25 @@ defmodule Xirsys.Sockets.Pipeline do
   end
 
   @doc """
-  Returns true when the pipeline declares more than the mandatory `:root` tier.
+  Returns `true` when the pipeline declares more than the mandatory `:root` tier.
+
+  ## Parameters
+
+    * `pipeline` - struct from `resolve/1`
   """
   @spec multi_tier?(t()) :: boolean()
   def multi_tier?(%__MODULE__{tiers: tiers}), do: map_size(tiers) > 1
 
   @doc """
-  Initializes root-tier accumulator and handler state maps for a connection.
+  Initializes root-tier accumulator and handler state for a stream connection.
+
+  Calls `handle_connect/1` when the root handler exports it.
+
+  ## Parameters
+
+    * `pipeline` - struct from `resolve/1`
+    * `conn` - new connection context
+    * `opts` - `:handler_state` used when `handle_connect/1` is absent
   """
   @spec init_session(t(), Conn.t(), keyword()) :: {map(), map()}
   def init_session(%__MODULE__{} = pipeline, %Conn{} = conn, opts) do
@@ -177,7 +232,19 @@ defmodule Xirsys.Sockets.Pipeline do
   end
 
   @doc """
-  Builds fresh root-tier session maps (used for stateless UDP datagram handling).
+  Builds fresh root-tier session maps for a single datagram (stateless UDP).
+
+  ## Parameters
+
+    * `pipeline` - struct from `resolve/1`
+    * `opts` - `:handler_state` stored under `:root`
+
+      iex> p = Xirsys.Sockets.Pipeline.resolve({Xirsys.Sockets.Accumulator.Raw, :handler})
+      iex> {accs, states} = Xirsys.Sockets.Pipeline.fresh_session(p, handler_state: :idle)
+      iex> Map.keys(accs)
+      [:root]
+      iex> states
+      %{root: :idle}
   """
   @spec fresh_session(t(), keyword()) :: {map(), map()}
   def fresh_session(%__MODULE__{} = pipeline, opts) do

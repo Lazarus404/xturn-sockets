@@ -24,10 +24,13 @@
 
 defmodule Xirsys.Sockets.Config do
   @moduledoc """
-  Runtime configuration for `xturn_sockets`.
+  Runtime configuration for `:xturn_sockets`.
 
-  Set `config :xturn_sockets, config_app: :my_app` in the host project so
-  `config :my_app, ...` overrides library defaults.
+  Lookup order for `get/2`: host app (`:config_app`), then `:xturn_sockets`,
+  then the caller's `default`.
+
+  Set `config :xturn_sockets, config_app: :my_app` so `config :my_app, ...`
+  overrides library defaults without copying every key.
   """
 
   @rate_limit_window 60_000
@@ -43,8 +46,15 @@ defmodule Xirsys.Sockets.Config do
   @reorder_keys [:enabled, :window, :max_delay_ms, :on_overflow]
 
   @doc """
-  Looks up configuration with precedence: host application (see `:config_app`),
-  then `:xturn_sockets`, then `default`.
+  Looks up `key` with host-app precedence.
+
+  ## Parameters
+
+    * `key` - atom stored under `:xturn_sockets` or the host `:config_app`
+    * `default` - returned when neither application defines `key`
+
+      iex> Xirsys.Sockets.Config.get(:__absent_doctest_key__, :fallback)
+      :fallback
   """
   @spec get(atom(), any()) :: any()
   def get(key, default \\ nil) do
@@ -57,56 +67,101 @@ defmodule Xirsys.Sockets.Config do
     end
   end
 
-  @doc false
+  @doc """
+  TLS/DTLS handshake timeout in milliseconds. Default `10_000`.
+  """
   @spec ssl_handshake_timeout() :: pos_integer()
   def ssl_handshake_timeout(), do: get(:ssl_handshake_timeout, 10_000)
 
-  @doc false
+  @doc """
+  Per-connection receive/send buffer size in bytes. Default `262_144`.
+  """
   @spec buffer_size() :: pos_integer()
   def buffer_size(), do: get(:buffer_size, 256 * 1024)
 
   @doc """
-  Receive/send buffer size for shared client-facing listener sockets (UDP/TCP accept).
+  Buffer size for shared listener sockets (UDP listen, TCP accept).
 
-  Defaults larger than `buffer_size/0` so the kernel queue can absorb bursts while
-  worker processes drain packets. Relay sockets use their own hard-coded buffers.
+  Defaults to `4_194_304` so the kernel queue can absorb bursts while workers
+  drain. Relay sockets set their own buffers in `Transport.UDP.open_relay/2`.
   """
   @spec listener_buffer_size() :: pos_integer()
   def listener_buffer_size(), do: get(:listener_buffer_size, 4 * 1024 * 1024)
 
-  @doc false
+  @doc """
+  Default `:pool` dispatch size when a tier omits `:pool_size`.
+  Falls back to `System.schedulers_online/0`.
+  """
   @spec tier_pool_size() :: pos_integer()
   def tier_pool_size(), do: get(:tier_pool_size, System.schedulers_online())
 
-  @doc false
+  @doc """
+  Idle lifetime for per-peer UDP sessions, in milliseconds. Default `30_000`.
+  """
   @spec udp_session_idle_ms() :: pos_integer()
   def udp_session_idle_ms(), do: get(:udp_session_idle_ms, 30_000)
 
-  @doc false
+  @doc """
+  Maximum concurrent per-peer UDP sessions. Default `100_000`.
+  """
   @spec max_udp_sessions() :: pos_integer()
   def max_udp_sessions(), do: get(:max_udp_sessions, 100_000)
 
-  @doc false
+  @doc """
+  Interval for sweeping idle UDP sessions, in milliseconds. Default `5_000`.
+  """
   @spec udp_session_sweep_ms() :: pos_integer()
   def udp_session_sweep_ms(), do: get(:udp_session_sweep_ms, 5_000)
 
-  @doc false
+  @doc """
+  Whether `check_rate_limit/1` is armed. Default `true`.
+  """
   @spec rate_limit_enabled?() :: boolean()
   def rate_limit_enabled?(), do: get(:rate_limit_enabled, true)
 
-  @doc false
+  @doc """
+  Advertised IPv4 bind address. Default `{0, 0, 0, 0}`.
+  """
   @spec server_ip() :: :inet.ip_address()
   def server_ip(), do: get(:server_ip, {0, 0, 0, 0})
 
-  @doc false
+  @doc """
+  Local IPv4 address used when `sockname/1` is unavailable. Default `{0, 0, 0, 0}`.
+  """
   @spec server_local_ip() :: :inet.ip_address()
   def server_local_ip(), do: get(:server_local_ip, {0, 0, 0, 0})
 
   @doc """
+  Advertised IPv6 bind address. Default `{0, 0, 0, 0, 0, 0, 0, 0}`.
+  """
+  @spec server_ip6() :: :inet.ip_address()
+  def server_ip6(), do: get(:server_ip6, {0, 0, 0, 0, 0, 0, 0, 0})
+
+  @doc """
+  Local IPv6 address used when `sockname/1` is unavailable.
+  Default `{0, 0, 0, 0, 0, 0, 0, 0}`.
+  """
+  @spec server_local_ip6() :: :inet.ip_address()
+  def server_local_ip6(), do: get(:server_local_ip6, {0, 0, 0, 0, 0, 0, 0, 0})
+
+  @doc """
   Merged reorder tunables for a named tier.
 
-  Precedence (lowest to highest): library defaults, `:xturn_sockets` tier config,
-  host `:config_app` tier config, explicit keys in `opts`.
+  Precedence (lowest to highest): library defaults, `:xturn_sockets` `:reorder`
+  config, host `:config_app` `:reorder` config, explicit keys in `opts`.
+
+  ## Parameters
+
+    * `name` - tier lookup key (e.g. `:rtp`), or `nil` for library defaults only
+    * `opts` - explicit overrides (`:enabled`, `:window`, `:max_delay_ms`, `:on_overflow`)
+
+      iex> opts = Xirsys.Sockets.Config.reorder_opts(nil, [])
+      iex> opts[:window]
+      16
+      iex> opts[:enabled]
+      true
+      iex> opts[:on_overflow]
+      :flush_oldest
   """
   @spec reorder_opts(atom() | nil, keyword()) :: keyword()
   def reorder_opts(name, opts) when is_list(opts) do
@@ -123,13 +178,17 @@ defmodule Xirsys.Sockets.Config do
   @doc """
   Fixed-window request counter for one client IP.
 
-  Intended for control-plane requests only. Callers must not apply this to
-  relayed data (TURN ChannelData, Send/Data indications): media runs at
-  hundreds of packets per second, so any request-shaped budget silently starves
-  it within seconds.
+  Intended for control-plane requests only. Do not apply this to relayed
+  media: a request-shaped budget is exhausted in seconds at packet rates.
 
-  Each IP holds a single row carrying the current window index and its count,
-  so both the check and the update are O(1) and memory stays constant per IP.
+  Each IP holds one row (window index + count), so check and update are O(1).
+
+  ## Parameters
+
+    * `client_ip` - peer address used as the ETS key
+
+      iex> Xirsys.Sockets.Config.check_rate_limit({203, 0, 113, 1})
+      :ok
   """
   @spec check_rate_limit(:inet.ip_address()) :: :ok | {:error, :rate_limited}
   def check_rate_limit(client_ip) do

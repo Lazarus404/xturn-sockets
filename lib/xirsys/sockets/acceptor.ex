@@ -24,7 +24,10 @@
 
 defmodule Xirsys.Sockets.Acceptor do
   @moduledoc """
-  Generic accept loop for connection/association-oriented transports.
+  Accept loop for connection-oriented transports (TCP, TLS).
+
+  Each accepted socket is started under `SockSupervisor` as a `Connection`.
+  `Transport.SCTP.accept/2` is not supported by this loop.
   """
   use GenServer
   require Logger
@@ -33,10 +36,32 @@ defmodule Xirsys.Sockets.Acceptor do
 
   @accept_timeout 1_000
 
+  @doc """
+  Listens and starts accepting.
+
+  ## Parameters
+
+  `opts` is a keyword list:
+
+    * `:transport` - `Xirsys.Sockets.Transport` module (required)
+    * `:ip` / `:port` - bind address (required)
+    * `:pipeline` - pipeline module, or omit and pass `:accumulator` + `:handler`
+    * `:listen_opts` - extra options forwarded to `listen/3`
+    * `:assigns` - map copied onto each `Conn`
+    * `:accept_timeout` - accept wait in milliseconds (default `1000`)
+    * `:connection_supervisor` - `SockSupervisor` name or pid (default `SockSupervisor`)
+  """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
+  @doc """
+  Bound port of a running acceptor (useful when `:port` was `0`).
+
+  ## Parameters
+
+    * `pid` - acceptor pid from `start_link/1`
+  """
   def port(pid), do: GenServer.call(pid, :port)
 
   @impl true
@@ -67,7 +92,8 @@ defmodule Xirsys.Sockets.Acceptor do
            accumulator: Keyword.get(opts, :accumulator),
            pipeline: Keyword.get(opts, :pipeline),
            assigns: Keyword.get(opts, :assigns, %{}),
-           accept_timeout: Keyword.get(opts, :accept_timeout, @accept_timeout)
+           accept_timeout: Keyword.get(opts, :accept_timeout, @accept_timeout),
+           connection_supervisor: Keyword.get(opts, :connection_supervisor, SockSupervisor)
          }}
 
       {:error, reason} = error ->
@@ -128,7 +154,7 @@ defmodule Xirsys.Sockets.Acceptor do
       |> maybe_put(:pipeline, state.pipeline)
       |> maybe_put_legacy_tier(state)
 
-    case SockSupervisor.start_connection(child_opts) do
+    case SockSupervisor.start_connection(state.connection_supervisor, child_opts) do
       {:ok, pid} ->
         transfer_control(state.transport, client_sock, pid)
 
@@ -161,6 +187,8 @@ defmodule Xirsys.Sockets.Acceptor do
     Keyword.merge(keyword, handler: handler, accumulator: accumulator)
   end
 
-  defp maybe_put_legacy_tier(keyword, %{pipeline: pipeline}) when not is_nil(pipeline), do: keyword
+  defp maybe_put_legacy_tier(keyword, %{pipeline: pipeline}) when not is_nil(pipeline),
+    do: keyword
+
   defp maybe_put_legacy_tier(keyword, _state), do: keyword
 end

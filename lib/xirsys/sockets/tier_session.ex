@@ -23,15 +23,40 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.TierSession do
-  @moduledoc false
+  @moduledoc """
+  Worker that owns one async pipeline tier's accumulator and handler state.
+
+  Started by `Engine` when a tier uses `dispatch: :task` or `dispatch: :pool`.
+  Messages are `{:push, payload, meta}` casts from the parent connection.
+  """
   use GenServer
 
   alias Xirsys.Sockets.{Engine, Pipeline, Pipeline.Tier, Telemetry}
 
+  @doc """
+  Starts a session for one tier of one connection.
+
+  ## Parameters
+
+  `opts` is a keyword list:
+
+    * `:pipeline` - compiled `%Pipeline{}`
+    * `:tier_key` - tier being isolated
+    * `:conn` - parent `Conn`
+    * `:owner` - parent connection pid (monitored)
+    * `:transport` - transport module for replies
+  """
   def start_link(opts) do
     GenServer.start_link(__MODULE__, opts)
   end
 
+  @doc """
+  Temporary child spec so a crashed tier is not restarted in-place.
+
+  ## Parameters
+
+    * `opts` - same keyword list as `start_link/1`
+  """
   def child_spec(opts) do
     %{
       id: {__MODULE__, opts},
@@ -52,7 +77,8 @@ defmodule Xirsys.Sockets.TierSession do
 
     ref = Process.monitor(owner)
 
-    %Tier{accumulator: acc_mod, accumulator_opts: acc_opts} = Pipeline.tier_spec(pipeline, tier_key)
+    %Tier{accumulator: acc_mod, accumulator_opts: acc_opts} =
+      Pipeline.tier_spec(pipeline, tier_key)
 
     {:ok,
      %{
@@ -62,11 +88,11 @@ defmodule Xirsys.Sockets.TierSession do
        owner: owner,
        owner_ref: ref,
        transport: transport,
-             accs: %{tier_key => acc_mod.init(acc_opts)},
-             states: %{tier_key => nil},
-             tier_sessions: %{},
-             session_monitors: %{}
-           }}
+       accs: %{tier_key => acc_mod.init(acc_opts)},
+       states: %{tier_key => nil},
+       tier_sessions: %{},
+       session_monitors: %{}
+     }}
   end
 
   @impl true

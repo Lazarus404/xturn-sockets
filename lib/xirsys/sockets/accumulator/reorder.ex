@@ -24,21 +24,23 @@
 
 defmodule Xirsys.Sockets.Accumulator.Reorder do
   @moduledoc """
-  Generic reordering decorator over any inner `Accumulator`.
+  Reordering decorator over any inner `Accumulator`.
 
   Whole packets from the inner accumulator are tagged with an integer key via
-  `key_fun.(packet, meta)`. Keys must be contiguous for in-order release starting
-  at the first key observed. Packets tagged `:unordered` bypass reordering.
+  `key_fun.(packet, meta)`. Keys must be contiguous for in-order release,
+  starting at the first key observed. Packets tagged `:unordered` skip the
+  reorder buffer.
 
   ## Options
 
     * `:inner` - inner accumulator module (default: `Accumulator.Raw`)
     * `:inner_opts` - options passed to `inner.init/1`
     * `:key_fun` - required `(packet, meta) -> integer() | :unordered`
-    * `:name` - config lookup key for `Config.reorder_opts/2` (e.g. `:rtp`)
-    * `:window`, `:max_delay_ms`, `:on_overflow`, `:enabled` - tunable via
-      config and/or explicit opts (see `Config.reorder_opts/2`)
+    * `:name` - config lookup key for `Config.reorder_opts/2`
+    * `:window`, `:max_delay_ms`, `:on_overflow`, `:enabled` - tunables via
+      config and/or explicit opts (`Config.reorder_opts/2`)
     * `:clock` - injectable clock, defaults to `System.monotonic_time/1`
+    * `:max_size` - bound on the ready queue (default: `1024`)
   """
   @behaviour Xirsys.Sockets.Accumulator
 
@@ -46,6 +48,24 @@ defmodule Xirsys.Sockets.Accumulator.Reorder do
 
   @default_ready_max 1024
 
+  @doc """
+  Builds reorder state. Raises if `:key_fun` is missing.
+
+  ## Parameters
+
+    * `opts` - see module options
+
+      iex> key_fun = fn <<n, _::binary>>, _ -> n end
+      iex> acc = Xirsys.Sockets.Accumulator.Reorder.init(key_fun: key_fun)
+      iex> acc =
+      ...>   acc
+      ...>   |> Xirsys.Sockets.Accumulator.Reorder.push(<<2>>, %{})
+      ...>   |> Xirsys.Sockets.Accumulator.Reorder.push(<<1>>, %{})
+      iex> {:ok, <<1>>, _, acc} = Xirsys.Sockets.Accumulator.Reorder.pop(acc)
+      iex> {:ok, <<2>>, _, acc} = Xirsys.Sockets.Accumulator.Reorder.pop(acc)
+      iex> elem(Xirsys.Sockets.Accumulator.Reorder.pop(acc), 0)
+      :more
+  """
   @impl true
   def init(opts) do
     name = Keyword.get(opts, :name)
@@ -72,6 +92,15 @@ defmodule Xirsys.Sockets.Accumulator.Reorder do
     }
   end
 
+  @doc """
+  Pushes `chunk` into the inner accumulator.
+
+  ## Parameters
+
+    * `acc` - state from `init/1`
+    * `chunk` - bytes for the inner accumulator
+    * `meta` - forwarded to `key_fun` after the inner `pop/1`
+  """
   @impl true
   def push(%{enabled: false, inner: inner, inner_mod: mod} = acc, chunk, meta) do
     %{acc | inner: mod.push(inner, chunk, meta)}
@@ -81,6 +110,13 @@ defmodule Xirsys.Sockets.Accumulator.Reorder do
     %{acc | inner: acc.inner_mod.push(acc.inner, chunk, meta)}
   end
 
+  @doc """
+  Releases the next in-order packet, or `{:more, acc}` while a gap remains.
+
+  ## Parameters
+
+    * `acc` - state after `push/3`
+  """
   @impl true
   def pop(%{enabled: false, inner: inner, inner_mod: mod} = acc) do
     case mod.pop(inner) do

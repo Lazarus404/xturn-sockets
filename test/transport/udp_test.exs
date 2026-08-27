@@ -204,7 +204,10 @@ defmodule XturnSockets.UDPTest do
         entry = Map.fetch!(state.sessions, peer_a)
         idle_ms = Application.fetch_env!(:xturn_sockets, :udp_session_idle_ms)
 
-        %{state | sessions: Map.put(state.sessions, peer_a, %{entry | last_seen: now - idle_ms - 1})}
+        %{
+          state
+          | sessions: Map.put(state.sessions, peer_a, %{entry | last_seen: now - idle_ms - 1})
+        }
       end)
 
       send(server, :sweep)
@@ -278,7 +281,11 @@ defmodule XturnSockets.UDPTest do
       # a replacement session (pid2) for :inner before it ever sees pid1's
       # :DOWN.
       :sys.suspend(server)
-      send(server, {:udp, :fake_socket, client_ip, client_port, TestSupport.frame("inner:second")})
+
+      send(
+        server,
+        {:udp, :fake_socket, client_ip, client_port, TestSupport.frame("inner:second")}
+      )
 
       Process.exit(pid1, :kill)
       assert eventually(fn -> not Process.alive?(pid1) end)
@@ -417,5 +424,4 @@ defmodule XturnSockets.UDPTest do
       end
     end
   end
-
 end

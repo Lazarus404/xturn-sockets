@@ -23,7 +23,12 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.Engine do
-  @moduledoc false
+  @moduledoc """
+  Drain loop: pop every whole packet from a tier, dispatch the handler, repeat.
+
+  `Connection` and `DatagramServer` call `push_and_drain/9` after each read.
+  `drain/8` is used for timer ticks (reorder timeouts) without a new chunk.
+  """
   require Logger
 
   alias Xirsys.Sockets.{
@@ -34,11 +39,29 @@ defmodule Xirsys.Sockets.Engine do
     TierSupervisor
   }
 
+  @typedoc """
+  Result of a drain pass: updated accumulators, handler states, async tier
+  pids, and `:ok` or `:close`.
+  """
   @type drain_result :: {map(), map(), map(), :ok | :close}
 
   @doc """
-  Repeatedly pops whole packets from a tier's accumulator and dispatches them
-  until the accumulator returns `{:more, _}`.
+  Pops whole packets from `tier_key` until the accumulator returns `{:more, _}`.
+
+  Handler `{:reply, _, _}` is sent on `conn.socket`. `{:descend, next, payload, _}`
+  pushes `payload` into `next`. `{:close, _}` stops the connection after this pass.
+  Framing errors emit `:frame_error` and continue.
+
+  ## Parameters
+
+    * `pipeline` - compiled pipeline
+    * `tier_key` - tier to drain (`:root`, …)
+    * `conn` - connection context used for replies
+    * `accs` - map of tier name to accumulator state
+    * `states` - map of tier name to handler state
+    * `tier_sessions` - map of async tier name to session pid
+    * `transport_mod` - `Xirsys.Sockets.Transport` implementation
+    * `owner_pid` - connection or datagram-server process
   """
   @spec drain(
           Pipeline.t(),
@@ -51,7 +74,9 @@ defmodule Xirsys.Sockets.Engine do
           pid()
         ) :: drain_result()
   def drain(pipeline, tier_key, conn, accs, states, tier_sessions, transport_mod, owner_pid) do
-    %Tier{accumulator: accumulator_mod, handler: handler_mod} = Pipeline.tier_spec(pipeline, tier_key)
+    %Tier{accumulator: accumulator_mod, handler: handler_mod} =
+      Pipeline.tier_spec(pipeline, tier_key)
+
     acc = Map.fetch!(accs, tier_key)
     handler_state = Map.fetch!(states, tier_key)
 
@@ -59,7 +84,12 @@ defmodule Xirsys.Sockets.Engine do
       {:ok, packet, meta, acc} ->
         accs = Map.put(accs, tier_key, acc)
 
-        case safe_handle(handler_mod, :handle_packet, [packet, meta, conn, handler_state], tier_key) do
+        case safe_handle(
+               handler_mod,
+               :handle_packet,
+               [packet, meta, conn, handler_state],
+               tier_key
+             ) do
           {:ok, handler_state} ->
             states = Map.put(states, tier_key, handler_state)
 
@@ -160,12 +190,21 @@ defmodule Xirsys.Sockets.Engine do
   end
 
   @doc """
-  Pushes `chunk` to `:root`, then drains from `:root`.
+  Pushes `chunk` into `:root`, then drains from `:root`.
 
-  Deliberately unthrottled: this path carries relayed media as well as control
-  traffic, so any request-shaped rate limit applied here starves media within
-  seconds. Handlers that need a budget should apply it to the specific message
-  classes that warrant one (see `Xirsys.Sockets.Config.check_rate_limit/1`).
+  Unthrottled: this path carries media as well as control traffic. Apply
+  `Config.check_rate_limit/1` in the handler for the message classes that
+  need a budget.
+
+  ## Parameters
+
+    * `pipeline` - compiled pipeline
+    * `chunk` - inbound bytes from `handle_message/2`
+    * `meta` - packet metadata (`:from`, `:received_at`, …)
+    * `conn` - connection context
+    * `accs` / `states` / `tier_sessions` - session maps
+    * `transport_mod` - transport used for `{:reply, _, _}`
+    * `owner_pid` - owning process
   """
   @spec push_and_drain(
           Pipeline.t(),
@@ -416,9 +455,7 @@ defmodule Xirsys.Sockets.Engine do
     %Tier{accumulator: mod, accumulator_opts: accumulator_opts} =
       Pipeline.tier_spec(pipeline, tier_key)
 
-    Logger.warning(
-      "tier #{inspect(tier_key)} crashed, resetting accumulator: #{inspect(reason)}"
-    )
+    Logger.warning("tier #{inspect(tier_key)} crashed, resetting accumulator: #{inspect(reason)}")
 
     Telemetry.emit(:tier_crashed, %{}, %{
       tier: tier_key,

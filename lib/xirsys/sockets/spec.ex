@@ -23,9 +23,28 @@
 ### ----------------------------------------------------------------------
 
 defmodule Xirsys.Sockets.Spec do
-  @moduledoc false
+  @moduledoc """
+  Normalizes `{module, opts}` or a bare `module` into `{module, opts}`.
 
-  @spec resolve(module() | {module(), keyword()}) :: {module(), keyword()}
+  Used by `Pipeline` when a tier names an accumulator.
+  """
+
+  @type spec :: module() | {module(), keyword()}
+
+  @doc """
+  Returns `{module, opts}`, using `[]` when only a module is given.
+
+  ## Parameters
+
+    * `spec` - `SomeModule` or `{SomeModule, keyword()}`
+
+      iex> Xirsys.Sockets.Spec.resolve(Xirsys.Sockets.Accumulator.Raw)
+      {Xirsys.Sockets.Accumulator.Raw, []}
+
+      iex> Xirsys.Sockets.Spec.resolve({Xirsys.Sockets.Accumulator.Raw, header_size: 2})
+      {Xirsys.Sockets.Accumulator.Raw, [header_size: 2]}
+  """
+  @spec resolve(spec()) :: {module(), keyword()}
   def resolve({mod, opts}) when is_atom(mod) and is_list(opts), do: {mod, opts}
   def resolve(mod) when is_atom(mod), do: {mod, []}
 end

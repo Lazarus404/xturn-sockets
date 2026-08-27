@@ -1,7 +1,7 @@
 # XTurn Sockets
 
 A format-agnostic Elixir socket library with pluggable packet framing and a single reusable
-drain engine for UDP, TCP, TLS, DTLS, and SCTP.
+drain engine for UDP, TCP, TLS, DTLS, and SCTP (listen-only; see below).
 
 ## Features
 
@@ -10,14 +10,24 @@ drain engine for UDP, TCP, TLS, DTLS, and SCTP.
 - **Handler behaviour** — business logic per tier
 - **Full drain loop** — extracts every whole packet from each read/datagram before re-arming
 - **Built-in accumulators** — `Accumulator.Raw`, `Accumulator.LengthPrefixed`, `Accumulator.Reorder`
-- **Telemetry** — optional `:telemetry` events under `[:xturn_sockets, ...]`
+- **Telemetry** — optional `:telemetry` events via `Telemetry.emit/3` under `[:xturn_sockets, ...]`
+
+**Control vs data:** route request-shaped traffic through `Engine` / `Handler`. High-rate
+media belongs on `UDP.open_relay/2` or a raw socket — not through the drain loop.
+
+**SCTP:** `listen/3` works when OTP provides `:gen_sctp`. `Acceptor` cannot drive SCTP
+(`accept/2` returns `{:error, :sctp_not_supported}`); associations need a custom owner.
+
+**Supervision:** start `SockSupervisor` and (if using async tiers) `TierSupervisor.Task` /
+`TierSupervisor.Pool` in your application before listeners. `DatagramServer` is one process
+per listen socket.
 
 ## Installation
 
 ```elixir
 def deps do
   [
-    {:xturn_sockets, "~> 2.0"},
+    {:xturn_sockets, "~> 2.1"},
     {:telemetry, "~> 1.0"}
   ]
 end
@@ -226,6 +236,9 @@ regressions in the engine path, not as an absolute TURN relay ceiling.
 
 ## Telemetry
 
+Emit events with `Xirsys.Sockets.Telemetry.emit/3` and attach your own `:telemetry` handlers.
+`Telemetry.attach_handlers/0` is optional library logging — not required for integration.
+
 Per-tier events (when `:telemetry_enabled` is true):
 
 - `[:xturn_sockets, :tier_dispatch]` — handler `handle_packet/4` duration, metadata `%{tier: ...}`
@@ -256,8 +269,9 @@ config :my_app,
 
 Lookup precedence: `config :config_app, key` → `config :xturn_sockets, key` → default.
 
-TLS/DTLS listeners require certificate configuration under the `:certs` application env (same
-as previous releases).
+TLS/DTLS certificates: pass `certfile` / `keyfile` in `listen/3` opts, or set
+`config :xturn_sockets, certs: [...]` (or host `:config_app`). Legacy `:certs` / `:xturn`
+application env is still supported.
 
 ## Architecture
 

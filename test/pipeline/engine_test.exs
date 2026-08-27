@@ -2,6 +2,7 @@ defmodule XturnSockets.EnginePipelineTest do
   use ExUnit.Case, async: true
 
   alias Xirsys.Sockets.{Accumulator.Raw, Conn, Engine, Pipeline}
+
   alias XturnSockets.PipelineSupport.{
     AsyncTwoTierPipeline,
     ClosePipeline,
@@ -178,7 +179,6 @@ defmodule XturnSockets.EnginePipelineTest do
       end
     end
   end
-
 end
 
 defmodule FakeTransport do

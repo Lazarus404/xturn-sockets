@@ -1,7 +1,7 @@
 defmodule XturnSockets.IntegrationTest do
   use ExUnit.Case
 
-    alias Xirsys.Sockets.{
+  alias Xirsys.Sockets.{
     Accumulator,
     Acceptor,
     Config,
@@ -45,6 +45,47 @@ defmodule XturnSockets.IntegrationTest do
 
   test "Spec.resolve defaults empty opts" do
     assert {Xirsys.Sockets.Accumulator.Raw, []} = Spec.resolve(Xirsys.Sockets.Accumulator.Raw)
+  end
+
+  test "SockSupervisor starts connection child on a named supervisor" do
+    name = :"SockSupervisor.EmbedTest.#{System.unique_integer([:positive])}"
+    {:ok, sup} = SockSupervisor.start_link(name: name)
+
+    {:ok, listen} = Xirsys.Sockets.Transport.TCP.listen(@test_ip, 0, [])
+    {:ok, {_, port}} = Xirsys.Sockets.Transport.TCP.sockname(listen)
+
+    parent = self()
+
+    Task.start(fn ->
+      {:ok, client} = :gen_tcp.connect(@test_ip, port, [:binary, active: false])
+      Process.sleep(500)
+      :gen_tcp.close(client)
+      send(parent, :named_sup_client_connected)
+    end)
+
+    assert {:ok, accepted} = Xirsys.Sockets.Transport.TCP.accept(listen, 2_000)
+    assert_receive :named_sup_client_connected, 2_000
+
+    {:ok, agent} = Agent.start_link(fn -> 0 end)
+
+    assert {:ok, pid} =
+             SockSupervisor.start_connection(name,
+               transport: Xirsys.Sockets.Transport.TCP,
+               socket: accepted,
+               handler: CountHandler,
+               accumulator: Xirsys.Sockets.Accumulator.Raw,
+               assigns: %{agent: agent}
+             )
+
+    assert is_pid(pid)
+    refute Enum.any?(DynamicSupervisor.which_children(SockSupervisor), fn {_, child, _, _} ->
+             child == pid
+           end)
+
+    Process.exit(pid, :kill)
+    Xirsys.Sockets.Transport.TCP.close(listen)
+    Agent.stop(agent)
+    DynamicSupervisor.stop(sup)
   end
 
   test "SockSupervisor starts connection child" do

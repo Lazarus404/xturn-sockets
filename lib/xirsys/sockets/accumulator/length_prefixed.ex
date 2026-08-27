@@ -26,19 +26,36 @@ defmodule Xirsys.Sockets.Accumulator.LengthPrefixed do
   @moduledoc """
   Frames packets using a fixed-size length header.
 
+  The popped packet is the body only (header is stripped). Multiple packets
+  in one `push/3` are drained by repeated `pop/1`.
+
   ## Options
 
     * `:header_size` - header width in bytes (default: `2`)
-    * `:length_offset` - byte offset of length field (default: `0`)
-    * `:length_size` - width of length field in bytes (default: same as header or 2)
+    * `:length_offset` - byte offset of the length field (default: `0`)
+    * `:length_size` - width of the length field in bytes (default: header size)
     * `:endianness` - `:big` or `:little` (default: `:big`)
     * `:length_includes_header` - whether length counts the header (default: `false`)
-    * `:max_size` - maximum buffer size before `:buffer_overflow` (default: `65536`)
+    * `:max_size` - max buffered bytes before `:buffer_overflow` (default: `65536`)
   """
   @behaviour Xirsys.Sockets.Accumulator
 
   @default_max 65_536
 
+  @doc """
+  Builds an empty byte buffer with the given header layout.
+
+  ## Parameters
+
+    * `opts` - see module options
+
+      iex> alias Xirsys.Sockets.Accumulator.LengthPrefixed
+      iex> acc = LengthPrefixed.init(header_size: 2)
+      iex> acc = LengthPrefixed.push(acc, <<0, 3, "ABC">>, %{})
+      iex> {:ok, "ABC", %{}, acc} = LengthPrefixed.pop(acc)
+      iex> elem(LengthPrefixed.pop(acc), 0)
+      :more
+  """
   @impl true
   def init(opts) do
     header_size = Keyword.get(opts, :header_size, 2)
@@ -57,12 +74,28 @@ defmodule Xirsys.Sockets.Accumulator.LengthPrefixed do
     }
   end
 
+  @doc """
+  Appends `chunk` to the buffer and merges `meta`.
+
+  ## Parameters
+
+    * `acc` - state from `init/1`
+    * `chunk` - more bytes (may be a partial header or several packets)
+    * `meta` - merged into the next successfully popped packet
+  """
   @impl true
   def push(%{buffer: buffer} = acc, chunk, meta) do
     buffer = <<buffer::binary, chunk::binary>>
     %{acc | buffer: buffer, meta: Map.merge(acc.meta, meta)}
   end
 
+  @doc """
+  Extracts one body when a complete header+payload is buffered.
+
+  ## Parameters
+
+    * `acc` - state after `push/3`
+  """
   @impl true
   def pop(%{buffer: buffer, max_size: max_size} = acc) when byte_size(buffer) > max_size do
     {:error, :buffer_overflow, acc}
