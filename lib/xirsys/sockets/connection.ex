@@ -33,8 +33,6 @@ defmodule Xirsys.Sockets.Connection do
 
   alias Xirsys.Sockets.{Config, Conn, Engine, Pipeline, Pipeline.Tier, Telemetry}
 
-  @active_opts [:binary, active: :once]
-
   @doc """
   Starts a connection process for an already-accepted `socket`.
 
@@ -77,43 +75,43 @@ defmodule Xirsys.Sockets.Connection do
     socket = Keyword.fetch!(opts, :socket)
     pipeline = resolve_pipeline(opts)
 
-    with {:ok, server_ip, server_port} <- local_endpoint(transport_mod, socket),
-         {:ok, client_ip, client_port} <- peer_endpoint(transport_mod, socket),
-         :ok <- transport_mod.setopts(socket, @active_opts) do
-      conn = %Conn{
-        listener: Keyword.get(opts, :listener),
-        socket: socket,
-        client_ip: client_ip,
-        client_port: client_port,
-        server_ip: server_ip,
-        server_port: server_port,
-        assigns: Keyword.get(opts, :assigns, %{})
-      }
+    {:ok, server_ip, server_port} = local_endpoint(transport_mod, socket)
+    {:ok, client_ip, client_port} = peer_endpoint(transport_mod, socket)
 
-      {accs, states} = Pipeline.init_session(pipeline, conn, opts)
-      tick_interval_ms = Keyword.get(opts, :tick_interval_ms)
+    conn = %Conn{
+      listener: Keyword.get(opts, :listener),
+      socket: socket,
+      client_ip: client_ip,
+      client_port: client_port,
+      server_ip: server_ip,
+      server_port: server_port,
+      assigns: Keyword.get(opts, :assigns, %{})
+    }
 
-      if tick_interval_ms do
-        schedule_tick(tick_interval_ms)
-      end
+    {accs, states} = Pipeline.init_session(pipeline, conn, opts)
+    tick_interval_ms = Keyword.get(opts, :tick_interval_ms)
 
-      {:ok,
-       %{
-         transport: transport_mod,
-         socket: socket,
-         pipeline: pipeline,
-         conn: conn,
-         accs: accs,
-         states: states,
-         tier_sessions: %{},
-         session_monitors: %{},
-         tick_interval_ms: tick_interval_ms
-       }}
-    else
-      {:error, reason} ->
-        transport_mod.close(socket)
-        {:stop, reason}
+    if tick_interval_ms do
+      schedule_tick(tick_interval_ms)
     end
+
+    # Acceptor-owned until controlling_process/2; it arms the socket after transfer.
+    unless Keyword.get(opts, :listener) do
+      :ok = transport_mod.setopts(socket, Config.active_socket_opts())
+    end
+
+    {:ok,
+     %{
+       transport: transport_mod,
+       socket: socket,
+       pipeline: pipeline,
+       conn: conn,
+       accs: accs,
+       states: states,
+       tier_sessions: %{},
+       session_monitors: %{},
+       tick_interval_ms: tick_interval_ms
+     }}
   end
 
   @impl true
@@ -123,6 +121,7 @@ defmodule Xirsys.Sockets.Connection do
     {:noreply, state}
   end
 
+  @impl true
   def handle_cast(:stop, state), do: {:stop, :normal, state}
 
   @impl true
@@ -148,11 +147,13 @@ defmodule Xirsys.Sockets.Connection do
     rearm(state, action)
   end
 
+  @impl true
   def handle_info({:tier_close, _tier_key, reason}, state) do
     safe_disconnect_all(state.pipeline, state.states, reason)
     {:stop, reason, state}
   end
 
+  @impl true
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
     case Map.pop(state.session_monitors, ref) do
       {{tier, ^pid}, monitors} ->
@@ -170,6 +171,7 @@ defmodule Xirsys.Sockets.Connection do
     end
   end
 
+  @impl true
   def handle_info(msg, state) do
     case state.transport.handle_message(msg, state.socket) do
       {:data, chunk, from} ->
@@ -194,6 +196,7 @@ defmodule Xirsys.Sockets.Connection do
           |> Map.merge(%{accs: accs, states: states, conn: conn})
           |> apply_tier_sessions(tier_sessions)
 
+        state = drain_pending_stream(state, Config.udp_active_n() - 1)
         rearm(state, action)
 
       {:closed, reason} ->
@@ -221,8 +224,50 @@ defmodule Xirsys.Sockets.Connection do
   defp rearm(state, :close), do: {:stop, :normal, state}
 
   defp rearm(state, :ok) do
-    _ = state.transport.setopts(state.socket, @active_opts)
+    _ = state.transport.setopts(state.socket, Config.active_socket_opts())
     {:noreply, state}
+  end
+
+  defp drain_pending_stream(state, 0), do: state
+
+  defp drain_pending_stream(state, budget) when budget > 0 do
+    receive do
+      msg ->
+        case state.transport.handle_message(msg, state.socket) do
+          {:data, chunk, from} ->
+            conn = update_from(state.conn, from)
+            meta = %{from: from, received_at: System.monotonic_time(:millisecond)}
+
+            {accs, states, tier_sessions, action} =
+              Engine.push_and_drain(
+                state.pipeline,
+                chunk,
+                meta,
+                conn,
+                state.accs,
+                state.states,
+                state.tier_sessions,
+                state.transport,
+                self()
+              )
+
+            state =
+              state
+              |> Map.merge(%{accs: accs, states: states, conn: conn})
+              |> apply_tier_sessions(tier_sessions)
+
+            case action do
+              :close -> state
+              :ok -> drain_pending_stream(state, budget - 1)
+            end
+
+          _ ->
+            send(self(), msg)
+            state
+        end
+    after
+      0 -> state
+    end
   end
 
   defp apply_tier_sessions(state, tier_sessions) do

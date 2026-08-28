@@ -51,7 +51,7 @@ defmodule Xirsys.Sockets.Accumulator do
 
   ## Parameters
 
-    * `opts` - implementation-specific keyword list (`:max_size`, `:header_size`, …)
+    * `opts` - implementation-specific keyword list (`:max_size`, `:header_size`, ...)
   """
   @callback init(keyword()) :: acc()
 
@@ -77,7 +77,7 @@ defmodule Xirsys.Sockets.Accumulator do
 
     * `{:ok, packet, meta, acc}` - one complete packet
     * `{:more, acc}` - incomplete; wait for another `push/3`
-    * `{:error, reason, acc}` - framing error (`:buffer_overflow`, …); drain continues
+    * `{:error, reason, acc}` - framing error (`:buffer_overflow`, ...); drain continues
   """
   @callback pop(acc()) ::
               {:ok, binary(), meta(), acc()}

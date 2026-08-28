@@ -42,7 +42,7 @@ defmodule Xirsys.Sockets.Handler do
   @typedoc "Opaque handler state, returned from `handle_connect/1` or `handle_packet/4`."
   @type state :: term()
 
-  @typedoc "Packet metadata from the accumulator (`:from`, `:received_at`, …)."
+  @typedoc "Packet metadata from the accumulator (`:from`, `:received_at`, ...)."
   @type meta :: map()
 
   @doc """
@@ -75,7 +75,7 @@ defmodule Xirsys.Sockets.Handler do
 
   ## Parameters
 
-    * `reason` - exit reason (`:normal`, `:tcp_closed`, …)
+    * `reason` - exit reason (`:normal`, `:tcp_closed`, ...)
     * `state` - last handler state
   """
   @callback handle_disconnect(term(), state()) :: :ok

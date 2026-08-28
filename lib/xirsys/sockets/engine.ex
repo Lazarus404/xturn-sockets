@@ -55,7 +55,7 @@ defmodule Xirsys.Sockets.Engine do
   ## Parameters
 
     * `pipeline` - compiled pipeline
-    * `tier_key` - tier to drain (`:root`, …)
+    * `tier_key` - tier to drain (`:root`, ...)
     * `conn` - connection context used for replies
     * `accs` - map of tier name to accumulator state
     * `states` - map of tier name to handler state
@@ -200,7 +200,7 @@ defmodule Xirsys.Sockets.Engine do
 
     * `pipeline` - compiled pipeline
     * `chunk` - inbound bytes from `handle_message/2`
-    * `meta` - packet metadata (`:from`, `:received_at`, …)
+    * `meta` - packet metadata (`:from`, `:received_at`, ...)
     * `conn` - connection context
     * `accs` / `states` / `tier_sessions` - session maps
     * `transport_mod` - transport used for `{:reply, _, _}`
@@ -488,29 +488,41 @@ defmodule Xirsys.Sockets.Engine do
   end
 
   defp safe_handle(mod, fun, args, tier_key) do
-    start = System.monotonic_time(:native)
+    if Telemetry.enabled?() do
+      start = System.monotonic_time(:native)
 
-    try do
-      result = apply(mod, fun, args)
-      duration = System.monotonic_time(:native) - start
-      Telemetry.emit(:tier_dispatch, %{duration: duration}, %{tier: tier_key})
-      result
-    rescue
-      error ->
+      try do
+        result = apply(mod, fun, args)
         duration = System.monotonic_time(:native) - start
+        :telemetry.execute([:xturn_sockets, :tier_dispatch], %{duration: duration}, %{tier: tier_key})
+        result
+      rescue
+        error ->
+          Logger.error(
+            "safe_handle rescued exception in #{inspect(mod)}.#{fun}: #{Exception.format(:error, error, __STACKTRACE__)}"
+          )
 
-        Logger.error(
-          "safe_handle rescued exception in #{inspect(mod)}.#{fun}: #{Exception.format(:error, error, __STACKTRACE__)}"
-        )
+          {:error, error}
+      catch
+        :exit, reason ->
+          Logger.error("safe_handle caught exit in #{inspect(mod)}.#{fun}: #{inspect(reason)}")
+          {:error, reason}
+      end
+    else
+      try do
+        apply(mod, fun, args)
+      rescue
+        error ->
+          Logger.error(
+            "safe_handle rescued exception in #{inspect(mod)}.#{fun}: #{Exception.format(:error, error, __STACKTRACE__)}"
+          )
 
-        Telemetry.emit(:tier_dispatch, %{duration: duration}, %{tier: tier_key})
-        {:error, error}
-    catch
-      :exit, reason ->
-        duration = System.monotonic_time(:native) - start
-        Logger.error("safe_handle caught exit in #{inspect(mod)}.#{fun}: #{inspect(reason)}")
-        Telemetry.emit(:tier_dispatch, %{duration: duration}, %{tier: tier_key})
-        {:error, reason}
+          {:error, error}
+      catch
+        :exit, reason ->
+          Logger.error("safe_handle caught exit in #{inspect(mod)}.#{fun}: #{inspect(reason)}")
+          {:error, reason}
+      end
     end
   end
 end

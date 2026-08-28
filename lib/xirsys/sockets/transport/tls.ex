@@ -101,6 +101,7 @@ defmodule Xirsys.Sockets.Transport.TLS do
 
     with {:ok, transport} <- :ssl.transport_accept(listen_sock, accept_timeout),
          {:ok, cli} <- :ssl.handshake(transport, ssl_timeout) do
+      :ok = :ssl.setopts(cli, [{:active, false}])
       Telemetry.emit(:ssl_handshake_success, %{protocol: :tls}, %{})
       {:ok, cli}
     else
@@ -236,7 +237,11 @@ defmodule Xirsys.Sockets.Transport.TLS do
   end
 
   defp aead_ciphers do
-    :ssl.cipher_suites(:default, :"tlsv1.2")
+    # TLS 1.3 exclusive suites do not overlap :default for tlsv1.2. Advertising
+    # 1.3 in :versions without those suites makes OTP fail the handshake with
+    # no_suitable_cipher instead of negotiating 1.2 (coturn uclient -t -S).
+    (:ssl.cipher_suites(:exclusive, :"tlsv1.3") ++ :ssl.cipher_suites(:default, :"tlsv1.2"))
+    |> Enum.uniq()
     |> Enum.reject(&insecure_cipher?/1)
   end
 

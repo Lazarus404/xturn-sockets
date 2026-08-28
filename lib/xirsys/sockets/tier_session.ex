@@ -135,13 +135,16 @@ defmodule Xirsys.Sockets.TierSession do
     {:stop, :normal, state}
   end
 
+  @impl true
   def handle_info({:tier_close, tier_key, reason}, state) do
     send(state.owner, {:tier_close, tier_key, reason})
     {:stop, :normal, state}
   end
 
+  @impl true
   def handle_info({:EXIT, _pid, _reason}, state), do: {:stop, :normal, state}
 
+  @impl true
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
     case Map.pop(state.session_monitors, ref) do
       {{tier, ^pid}, monitors} ->

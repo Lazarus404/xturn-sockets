@@ -73,12 +73,18 @@ defmodule Xirsys.Sockets.Transport.SCTP do
     end
   end
 
+  @doc """
+  SCTP has no `accept/2`; associations arrive as messages on the listen socket.
+
+  Always returns `{:error, :sctp_not_supported}` so callers use a custom
+  association handler instead of `Acceptor`'s accept loop.
+
+  ## Parameters
+
+    * `_listen_sock` - SCTP listen socket (unused)
+    * `_timeout` - accept timeout (unused)
+  """
   @impl true
-  # gen_sctp has no accept/2. Associations arrive as messages on the listening
-  # socket and are split off with gen_sctp:peeloff/2, so SCTP cannot currently be
-  # driven by Acceptor's accept loop. This previously called the nonexistent
-  # function and relied on rescuing UndefinedFunctionError to reach the same
-  # result.
   def accept(_listen_sock, _timeout), do: {:error, :sctp_not_supported}
 
   @impl true

@@ -32,7 +32,7 @@ defmodule Xirsys.Sockets.Acceptor do
   use GenServer
   require Logger
 
-  alias Xirsys.Sockets.{SockSupervisor, Telemetry}
+  alias Xirsys.Sockets.{Config, SockSupervisor, Telemetry}
 
   @accept_timeout 1_000
 
@@ -132,6 +132,7 @@ defmodule Xirsys.Sockets.Acceptor do
     end
   end
 
+  @impl true
   def handle_info({:EXIT, _, _}, state) do
     Process.send(self(), :accept, [])
     {:noreply, state}
@@ -168,6 +169,7 @@ defmodule Xirsys.Sockets.Acceptor do
     if function_exported?(transport_mod, :controlling_process, 2) do
       case transport_mod.controlling_process(client_sock, pid) do
         :ok ->
+          _ = transport_mod.setopts(client_sock, Config.active_socket_opts())
           :ok
 
         {:error, reason} ->
@@ -175,6 +177,7 @@ defmodule Xirsys.Sockets.Acceptor do
           transport_mod.close(client_sock)
       end
     else
+      _ = transport_mod.setopts(client_sock, Config.active_socket_opts())
       :ok
     end
   end

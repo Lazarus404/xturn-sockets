@@ -13,7 +13,7 @@ defmodule XturnSockets.RFC8656Test do
   @v4 {127, 0, 0, 1}
   @v6 {0, 0, 0, 0, 0, 0, 0, 1}
 
-  describe "IPv6 listen (RFC 8656 §5 / §13)" do
+  describe "IPv6 listen (RFC 8656 5 / 13)" do
     test "UDP.listen on an IPv6 loopback address succeeds" do
       assert {:ok, sock} = UDP.listen(@v6, 0, [])
       assert {:ok, {ip, _port}} = UDP.sockname(sock)
@@ -29,7 +29,7 @@ defmodule XturnSockets.RFC8656Test do
     end
   end
 
-  describe "ICMP error parse (RFC 8656 §15)" do
+  describe "ICMP error parse (RFC 8656 15)" do
     test "parse_icmp_error accepts tuple and map shapes" do
       peer = {{8, 8, 8, 8}, 3478}
 
@@ -44,7 +44,7 @@ defmodule XturnSockets.RFC8656Test do
     end
   end
 
-  describe "DONT-FRAGMENT helper (RFC 8656 §14)" do
+  describe "DONT-FRAGMENT helper (RFC 8656 14)" do
     test "set_dont_fragment returns :ok or {:error, :not_supported}" do
       {:ok, sock} = UDP.listen(@v4, 0, [])
 
@@ -54,7 +54,7 @@ defmodule XturnSockets.RFC8656Test do
     end
   end
 
-  describe "outbound TCP connect (RFC 6062 / RFC 8656 §5)" do
+  describe "outbound TCP connect (RFC 6062 / RFC 8656 5)" do
     test "connect/3 opens a client socket to a listening peer" do
       {:ok, listen} = TCP.listen(@v4, 0, [])
       {:ok, {_, port}} = TCP.sockname(listen)

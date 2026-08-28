@@ -35,27 +35,45 @@ defmodule Xirsys.Sockets.Telemetry do
 
   alias Xirsys.Sockets.Config
 
+  @enabled_key {__MODULE__, :enabled}
+
   @doc """
   Executes `[:xturn_sockets, event_name]` when telemetry is enabled.
 
   ## Parameters
 
     * `event_name` - last segment of the event name (atom)
-    * `measurements` - numeric map (`%{bytes: n}`, …)
-    * `metadata` - context map (`%{ip: tuple, port: n}`, …)
+    * `measurements` - numeric map (`%{bytes: n}`, ...)
+    * `metadata` - context map (`%{ip: tuple, port: n}`, ...)
 
       iex> Xirsys.Sockets.Telemetry.emit(:doctest_event, %{count: 1}, %{})
       :ok
   """
   @spec emit(atom(), map(), map()) :: :ok
   def emit(event_name, measurements, metadata) do
-    if Config.get(:telemetry_enabled, true) do
+    if enabled?() do
       :telemetry.execute([:xturn_sockets, event_name], measurements, metadata)
     end
 
     :ok
+  end
+
+  @doc false
+  @spec enabled?() :: boolean()
+  def enabled?() do
+    :persistent_term.get(@enabled_key)
   rescue
-    _ -> :ok
+    ArgumentError ->
+      value = Config.get(:telemetry_enabled, true)
+      :persistent_term.put(@enabled_key, value)
+      value
+  end
+
+  @doc false
+  @spec refresh_enabled!() :: :ok
+  def refresh_enabled!() do
+    :persistent_term.put(@enabled_key, Config.get(:telemetry_enabled, true))
+    :ok
   end
 
   @doc """
@@ -133,6 +151,8 @@ defmodule Xirsys.Sockets.Telemetry do
 
   Keys include connection counts, bytes sent/received, rate-limit hits, and
   SSL handshake totals. `last_updated` is `System.system_time(:second)`.
+
+  Takes no parameters; counters are global to the VM via `:persistent_term`.
   """
   def get_metrics() do
     %{
@@ -315,14 +335,27 @@ defmodule Xirsys.Sockets.Telemetry do
   # Counter management using persistent_term for performance
 
   defp increment_counter(key, amount \\ 1) do
-    current = get_counter(key)
-    :persistent_term.put({__MODULE__, key}, current + amount)
+    :atomics.add(counter_ref(key), 1, amount)
   end
 
   defp get_counter(key) do
-    :persistent_term.get({__MODULE__, key}, 0)
+    :atomics.get(counter_ref(key), 1)
   rescue
     ArgumentError -> 0
+  end
+
+  defp counter_ref(key) do
+    counter_key = {__MODULE__, :counter, key}
+
+    case :persistent_term.get(counter_key, nil) do
+      nil ->
+        ref = :atomics.new(1, signed: false)
+        :persistent_term.put(counter_key, ref)
+        ref
+
+      ref ->
+        ref
+    end
   end
 
   @doc """
@@ -332,12 +365,7 @@ defmodule Xirsys.Sockets.Telemetry do
       :ok
   """
   def reset_counters() do
-    mod = __MODULE__
-
-    for {key, _} <- :persistent_term.get(),
-        match?({^mod, _}, key),
-        do: :persistent_term.erase(key)
-
+    :persistent_term.erase(@enabled_key)
     :ok
   end
 
@@ -346,6 +374,8 @@ defmodule Xirsys.Sockets.Telemetry do
 
   Returns `:healthy`, `:degraded` (SSL error rate), `:unhealthy` (send error
   rate), or `:under_attack` (rate-limit hits).
+
+  Takes no parameters; reads counters via `get_metrics/0`.
   """
   def health_status() do
     metrics = get_metrics()

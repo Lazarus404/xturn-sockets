@@ -114,6 +114,30 @@ defmodule Xirsys.Sockets.Config do
   def udp_session_sweep_ms(), do: get(:udp_session_sweep_ms, 5_000)
 
   @doc """
+  UDP `{active, N}` batch size. `1` means `active: :once`. Default `32`.
+  """
+  @spec udp_active_n() :: pos_integer()
+  def udp_active_n() do
+    case get(:udp_active_n, 32) do
+      n when is_integer(n) and n >= 1 -> n
+      _ -> 32
+    end
+  end
+
+  @doc """
+  Socket options to re-arm UDP/TCP listeners and relay sockets after each read.
+
+  Uses `{active, N}` when `udp_active_n/0` > 1, else `active: :once`.
+  """
+  @spec active_socket_opts() :: keyword()
+  def active_socket_opts() do
+    case udp_active_n() do
+      1 -> [:binary, active: :once]
+      n -> [:binary, active: n]
+    end
+  end
+
+  @doc """
   Whether `check_rate_limit/1` is armed. Default `true`.
   """
   @spec rate_limit_enabled?() :: boolean()

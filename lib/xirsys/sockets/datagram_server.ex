@@ -34,7 +34,6 @@ defmodule Xirsys.Sockets.DatagramServer do
 
   alias Xirsys.Sockets.{Config, Conn, Engine, Pipeline, Pipeline.Tier, Telemetry}
 
-  @active_opts [:binary, active: :once]
   @max_packet_size 64 * 1024
 
   # System.monotonic_time/1 is relative to an arbitrary, possibly-negative
@@ -74,6 +73,21 @@ defmodule Xirsys.Sockets.DatagramServer do
   """
   def port(pid), do: GenServer.call(pid, :port)
 
+  @doc """
+  Returns the listen socket owned by `pid`.
+
+  Used when a reply must be sent from a different local endpoint than the
+  socket that received the datagram (RFC 5780 CHANGE-REQUEST).
+  """
+  @spec socket(pid()) :: term()
+  def socket(pid), do: GenServer.call(pid, :socket)
+
+  @doc """
+  Returns `{server_ip, server_port}` for the bound listener.
+  """
+  @spec endpoint(pid()) :: {:inet.ip_address(), :inet.port_number()}
+  def endpoint(pid), do: GenServer.call(pid, :endpoint)
+
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
@@ -88,7 +102,7 @@ defmodule Xirsys.Sockets.DatagramServer do
 
     case transport_mod.listen(ip, port, listen_opts) do
       {:ok, socket} ->
-        :ok = transport_mod.setopts(socket, @active_opts)
+        :ok = transport_mod.setopts(socket, Config.active_socket_opts())
 
         {:ok, server_ip, server_port} = local_endpoint(transport_mod, socket)
         Telemetry.emit(:udp_listener_started, %{}, %{ip: server_ip, port: server_port})
@@ -101,6 +115,14 @@ defmodule Xirsys.Sockets.DatagramServer do
           schedule_sweep(Config.udp_session_sweep_ms())
         end
 
+        init_opts = Keyword.take(opts, [:handler_state])
+
+        stateless =
+          unless peer_sessions? do
+            {accs, states} = Pipeline.fresh_session(pipeline, init_opts)
+            %{accs: accs, states: states}
+          end
+
         {:ok,
          %{
            transport: transport_mod,
@@ -109,11 +131,12 @@ defmodule Xirsys.Sockets.DatagramServer do
            server_ip: server_ip,
            server_port: server_port,
            assigns: Keyword.get(opts, :assigns, %{}),
-           init_opts: Keyword.take(opts, [:handler_state]),
+           init_opts: init_opts,
            tick_interval_ms: tick_interval_ms,
            peer_sessions?: peer_sessions?,
            sessions: if(peer_sessions?, do: %{}, else: nil),
-           session_monitors: %{}
+           session_monitors: %{},
+           stateless: stateless
          }}
 
       {:error, reason} = error ->
@@ -128,11 +151,22 @@ defmodule Xirsys.Sockets.DatagramServer do
   end
 
   @impl true
+  def handle_call(:socket, _from, state) do
+    {:reply, state.socket, state}
+  end
+
+  @impl true
+  def handle_call(:endpoint, _from, state) do
+    {:reply, {state.server_ip, state.server_port}, state}
+  end
+
+  @impl true
   def handle_cast({:send, data, ip, port}, state) do
     _ = state.transport.send(state.socket, data, {ip, port})
     {:noreply, state}
   end
 
+  @impl true
   def handle_cast(:stop, state), do: {:stop, :normal, state}
 
   @impl true
@@ -164,6 +198,7 @@ defmodule Xirsys.Sockets.DatagramServer do
     {:noreply, %{state | sessions: sessions}}
   end
 
+  @impl true
   def handle_info(:sweep, %{sessions: sessions} = state) when is_map(sessions) do
     now = System.monotonic_time(:millisecond)
     idle_ms = Config.udp_session_idle_ms()
@@ -184,12 +219,15 @@ defmodule Xirsys.Sockets.DatagramServer do
     {:noreply, state}
   end
 
+  @impl true
   def handle_info(:sweep, state), do: {:noreply, state}
 
+  @impl true
   def handle_info({:tier_close, _tier_key, reason}, state) do
     {:stop, reason, state}
   end
 
+  @impl true
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
     case Map.pop(state.session_monitors, ref) do
       {{peer, tier, ^pid}, monitors} ->
@@ -224,6 +262,7 @@ defmodule Xirsys.Sockets.DatagramServer do
     end
   end
 
+  @impl true
   def handle_info(msg, state) do
     case state.transport.handle_message(msg, state.socket) do
       {:data, chunk, {client_ip, client_port}} ->
@@ -235,7 +274,9 @@ defmodule Xirsys.Sockets.DatagramServer do
 
           rearm(state)
         else
-          process_datagram(state, chunk, client_ip, client_port)
+          state = process_datagram(state, chunk, client_ip, client_port)
+          state = drain_pending_datagrams(state, Config.udp_active_n() - 1)
+          rearm(state)
         end
 
       :ignore ->
@@ -262,22 +303,23 @@ defmodule Xirsys.Sockets.DatagramServer do
 
     old_peer_entry = if state.sessions, do: Map.get(state.sessions, peer), else: nil
 
-    {sessions, accs, states, tier_sessions} =
+    {sessions, accs, states, tier_sessions, stateless} =
       if state.sessions do
         case old_peer_entry do
           %{accs: accs, states: states, tier_sessions: tier_sessions} ->
             {accs, states, tier_sessions} =
               refresh_root_acc(state.pipeline, accs, states, tier_sessions)
 
-            {state.sessions, accs, states, tier_sessions}
+            {state.sessions, accs, states, tier_sessions, nil}
 
           nil ->
             {accs, states} = Pipeline.fresh_session(state.pipeline, state.init_opts)
-            {state.sessions, accs, states, %{}}
+            {state.sessions, accs, states, %{}, nil}
         end
       else
-        {accs, states} = Pipeline.fresh_session(state.pipeline, state.init_opts)
-        {state.sessions, accs, states, %{}}
+        %{accs: accs, states: states} = state.stateless
+        {accs, states} = refresh_root_acc_pair(state.pipeline, accs, states)
+        {state.sessions, accs, states, %{}, %{accs: accs, states: states}}
       end
 
     {accs, states, tier_sessions, _action} =
@@ -308,17 +350,50 @@ defmodule Xirsys.Sockets.DatagramServer do
       state
       |> monitor_new_tier_sessions(peer, tier_sessions, prior_tier_sessions)
       |> then(fn state ->
-        if state.sessions do
-          %{
+        cond do
+          state.sessions ->
+            %{
+              state
+              | sessions: Map.put(sessions, peer, new_entry(accs, states, tier_sessions, now))
+            }
+
+          stateless ->
+            %{state | stateless: stateless}
+
+          true ->
             state
-            | sessions: Map.put(sessions, peer, new_entry(accs, states, tier_sessions, now))
-          }
-        else
-          state
         end
       end)
 
-    rearm(state)
+    state
+  end
+
+  defp drain_pending_datagrams(state, 0), do: state
+
+  defp drain_pending_datagrams(state, budget) when budget > 0 do
+    receive do
+      msg ->
+        case state.transport.handle_message(msg, state.socket) do
+          {:data, chunk, {client_ip, client_port}} when byte_size(chunk) <= @max_packet_size ->
+            drain_pending_datagrams(
+              process_datagram(state, chunk, client_ip, client_port),
+              budget - 1
+            )
+
+          _ ->
+            send(self(), msg)
+            state
+        end
+    after
+      0 -> state
+    end
+  end
+
+  defp refresh_root_acc_pair(pipeline, accs, states) do
+    %Tier{accumulator: root_mod, accumulator_opts: root_opts} =
+      Pipeline.tier_spec(pipeline, :root)
+
+    {Map.put(accs, :root, root_mod.init(root_opts)), states}
   end
 
   defp new_entry(accs, states, tier_sessions, last_seen) do
@@ -424,7 +499,7 @@ defmodule Xirsys.Sockets.DatagramServer do
   end
 
   defp rearm(state) do
-    _ = state.transport.setopts(state.socket, @active_opts)
+    _ = state.transport.setopts(state.socket, Config.active_socket_opts())
     {:noreply, state}
   end
 

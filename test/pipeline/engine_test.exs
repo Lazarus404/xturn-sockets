@@ -20,8 +20,16 @@ defmodule XturnSockets.EnginePipelineTest do
   }
 
   setup do
-    {:ok, agent} = Agent.start_link(fn -> [] end)
-    on_exit(fn -> if Process.alive?(agent), do: Agent.stop(agent) end)
+    {:ok, agent} = Agent.start(fn -> [] end)
+
+    on_exit(fn ->
+      try do
+        Agent.stop(agent)
+      catch
+        :exit, _ -> :ok
+      end
+    end)
+
     {:ok, agent: agent, conn: %{@conn | assigns: %{agent: agent}}}
   end
 
@@ -115,10 +123,15 @@ defmodule XturnSockets.EnginePipelineTest do
     pipeline = Pipeline.resolve(AsyncTwoTierPipeline)
     {accs, states} = Pipeline.fresh_session(pipeline, [])
 
-    for label <- ["one", "two", "three"] do
-      payload = XturnSockets.TestSupport.frame("inner:#{label}")
-      push(pipeline, payload, conn, accs, states)
-    end
+    {_accs, _states, sessions} =
+      Enum.reduce(["one", "two", "three"], {accs, states, %{}}, fn label,
+                                                                  {accs, states, sessions} ->
+        payload = XturnSockets.TestSupport.frame("inner:#{label}")
+        {accs, states, sessions, :ok} = push(pipeline, payload, conn, accs, states, sessions)
+        {accs, states, sessions}
+      end)
+
+    assert map_size(sessions) == 1
 
     assert eventually(fn ->
              Agent.get(agent, & &1) |> Enum.reverse() == ["one", "two", "three"]
@@ -153,7 +166,7 @@ defmodule XturnSockets.EnginePipelineTest do
     assert Agent.get(agent, & &1) == ["legacy"]
   end
 
-  defp push(pipeline, chunk, conn, accs, states) do
+  defp push(pipeline, chunk, conn, accs, states, sessions \\ %{}) do
     Engine.push_and_drain(
       pipeline,
       chunk,
@@ -161,7 +174,7 @@ defmodule XturnSockets.EnginePipelineTest do
       conn,
       accs,
       states,
-      %{},
+      sessions,
       FakeTransport,
       self()
     )
@@ -198,6 +211,8 @@ defmodule FakeTransport do
   def sockname(_socket), do: {:ok, {{127, 0, 0, 1}, 0}}
   @impl true
   def close(_socket), do: :ok
+  @impl true
+  def framing(), do: :stream
   @impl true
   def handle_message(_msg, _socket), do: :ignore
 end

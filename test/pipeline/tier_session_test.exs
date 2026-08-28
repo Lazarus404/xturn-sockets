@@ -107,5 +107,7 @@ defmodule TierSessionFakeTransport do
   @impl true
   def close(_socket), do: :ok
   @impl true
+  def framing(), do: :stream
+  @impl true
   def handle_message(_msg, _socket), do: :ignore
 end

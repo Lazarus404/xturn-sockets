@@ -80,6 +80,9 @@ defmodule Xirsys.Sockets.Pipeline do
     quote do
       @pipeline_tiers @pipeline_tiers ++ [unquote(name)]
 
+      @doc """
+      Returns the compiled `%Xirsys.Sockets.Pipeline.Tier{}` for `#{unquote(name)}`.
+      """
       def __tier_spec__(unquote(name)) do
         tier_opts = unquote(opts)
         accumulator = Keyword.fetch!(tier_opts, :accumulator)
@@ -122,6 +125,7 @@ defmodule Xirsys.Sockets.Pipeline do
     end
 
     quote do
+      @doc "Returns the ordered list of tier names declared on this pipeline module."
       def __tiers__, do: unquote(tiers)
     end
   end
@@ -181,7 +185,7 @@ defmodule Xirsys.Sockets.Pipeline do
   ## Parameters
 
     * `pipeline` - struct from `resolve/1`
-    * `key` - tier name (`:root`, …)
+    * `key` - tier name (`:root`, ...)
   """
   @spec tier_spec(t(), atom()) :: Tier.t()
   def tier_spec(%__MODULE__{tiers: tiers}, key) do

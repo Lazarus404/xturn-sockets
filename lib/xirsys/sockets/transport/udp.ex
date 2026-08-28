@@ -36,7 +36,6 @@ defmodule Xirsys.Sockets.Transport.UDP do
 
   @listen_opts [active: false]
   @relay_opts [
-    active: :once,
     buffer: 1024 * 1024,
     recbuf: 1024 * 1024,
     sndbuf: 1024 * 1024
@@ -50,6 +49,7 @@ defmodule Xirsys.Sockets.Transport.UDP do
       |> Keyword.merge(opts)
       |> with_ip_family(ip)
       |> Keyword.put(:reuseaddr, true)
+      |> maybe_reuseport(opts)
 
     case :gen_udp.open(port, listen_opts) do
       {:ok, sock} = ok ->
@@ -83,7 +83,7 @@ defmodule Xirsys.Sockets.Transport.UDP do
 
     case :gen_udp.open(port, listen_opts) do
       {:ok, sock} = ok ->
-        _ = :inet.setopts(sock, [:binary])
+        _ = :inet.setopts(sock, Config.active_socket_opts())
         ok
 
       {:error, _} = error ->
@@ -166,6 +166,17 @@ defmodule Xirsys.Sockets.Transport.UDP do
 
   @impl true
   def peername(_socket), do: {:error, :connectionless}
+
+  @doc """
+  Transfers UDP socket message delivery to `pid` (used for relay ingress).
+
+  ## Parameters
+
+    * `socket` - open UDP socket
+    * `pid` - process that will receive `{:udp, ...}` / `{:udp_passive, ...}`
+  """
+  @impl true
+  def controlling_process(socket, pid), do: :gen_udp.controlling_process(socket, pid)
 
   @impl true
   def close(socket) do
@@ -280,5 +291,13 @@ defmodule Xirsys.Sockets.Transport.UDP do
   defp buffer_opts do
     size = Config.listener_buffer_size()
     [buffer: size, recbuf: size, sndbuf: size]
+  end
+
+  defp maybe_reuseport(opts, source) do
+    if Keyword.get(source, :reuseport, false) do
+      Keyword.put(opts, :reuseport, true)
+    else
+      opts
+    end
   end
 end

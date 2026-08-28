@@ -136,7 +136,7 @@ defmodule Xirsys.Sockets.Transport do
 
   ## Parameters
 
-    * `message` - raw `handle_info/2` payload (`{:tcp, ...}`, `{:udp, ...}`, …)
+    * `message` - raw `handle_info/2` payload (`{:tcp, ...}`, `{:udp, ...}`, ...)
     * `socket` - socket the message belongs to
 
   ## Returns

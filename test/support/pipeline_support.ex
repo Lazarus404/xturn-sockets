@@ -91,7 +91,7 @@ defmodule XturnSockets.PipelineSupport do
 
   defmodule ScratchPoolSupervisor do
     @moduledoc """
-    See `ScratchTaskSupervisor` — an isolated stand-in for
+    See `ScratchTaskSupervisor` - an isolated stand-in for
     `Xirsys.Sockets.TierSupervisor.Pool`.
     """
     alias Xirsys.Sockets.TierSupervisor

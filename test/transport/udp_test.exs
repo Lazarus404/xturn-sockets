@@ -14,12 +14,34 @@ defmodule XturnSockets.UDPTest do
 
       assert :ok = UDP.send(sender, "hello", {@test_ip, port})
 
-      assert {:ok, {ip, sender_port, data}} = :gen_udp.recv(receiver, 5, 1_000)
+      assert {:ok, {ip, _sender_port, data}} = :gen_udp.recv(receiver, 5, 1_000)
       assert data == "hello"
       assert ip == @test_ip
 
       :gen_udp.close(sender)
       UDP.close(receiver)
+    end
+
+    @tag :reuseport
+    test "reuseport binds multiple listeners on one port when supported" do
+      {:ok, s1} = UDP.listen(@test_ip, 0, reuseport: true)
+      {:ok, {_, port}} = UDP.sockname(s1)
+
+      case UDP.listen(@test_ip, port, reuseport: true) do
+        {:ok, s2} ->
+          {:ok, sender} = :gen_udp.open(0, [:binary, active: false])
+          assert :ok = UDP.send(sender, "shard", {@test_ip, port})
+
+          assert recv_on_either(s1, s2, 5)
+
+          :gen_udp.close(sender)
+          UDP.close(s2)
+
+        {:error, reason} ->
+          assert reason in [:eaddrinuse, :einval, :enoprotoopt]
+      end
+
+      UDP.close(s1)
     end
   end
 
@@ -44,6 +66,46 @@ defmodule XturnSockets.UDPTest do
 
       Process.sleep(100)
       assert TestSupport.packets(agent) == ["alpha", "beta"]
+
+      :gen_udp.close(sender)
+      GenServer.stop(server)
+      Agent.stop(agent)
+    end
+
+    test "processes a burst of UDP datagrams when udp_active_n > 1" do
+      previous = Application.get_env(:xturn_sockets, :udp_active_n)
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:xturn_sockets, :udp_active_n, previous)
+        else
+          Application.delete_env(:xturn_sockets, :udp_active_n)
+        end
+      end)
+
+      Application.put_env(:xturn_sockets, :udp_active_n, 8)
+      {:ok, agent} = TestSupport.start_collector()
+
+      {:ok, server} =
+        DatagramServer.start_link(
+          ip: @test_ip,
+          port: 0,
+          handler: TestSupport.CollectHandler,
+          accumulator: Xirsys.Sockets.Accumulator.Raw,
+          assigns: %{agent: agent}
+        )
+
+      port = DatagramServer.port(server)
+      {:ok, sender} = :gen_udp.open(0, [:binary, active: false])
+
+      for i <- 1..20 do
+        :ok = :gen_udp.send(sender, @test_ip, port, "pkt-#{i}")
+      end
+
+      Process.sleep(200)
+      packets = TestSupport.packets(agent)
+      assert length(packets) == 20
+      assert MapSet.new(packets) == MapSet.new(for(i <- 1..20, do: "pkt-#{i}"))
 
       :gen_udp.close(sender)
       GenServer.stop(server)
@@ -410,6 +472,13 @@ defmodule XturnSockets.UDPTest do
     |> server_state()
     |> Map.fetch!(:sessions)
     |> Map.fetch!(peer)
+  end
+
+  defp recv_on_either(s1, s2, len) do
+    case :gen_udp.recv(s1, len, 500) do
+      {:ok, {_, _, "shard"}} -> true
+      _ -> match?({:ok, {_, _, "shard"}}, :gen_udp.recv(s2, len, 500))
+    end
   end
 
   defp eventually(fun, attempts \\ 60) do
