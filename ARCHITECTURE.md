@@ -1,17 +1,24 @@
 # xturn-sockets architecture
 
-`xturn-sockets` is a format-agnostic socket library. It owns listen/accept/read/write, packet framing, and a shared drain loop. It does **not** know STUN, TURN, or RTP - those live in the host application (`xturn`), since `xturn-sockets` is designed to be app agnostic (so it was probably stupid of me to call it thus).
+`xturn-sockets` is a format-agnostic socket library. It owns listen/accept/read/write, packet framing, and a shared drain loop. It does **not** know STUN, TURN, or RTP - those live in the host application (`xturn`). The package name is historical; the library itself stays protocol-agnostic.
 
 ## Layers
 
 ```
 Host app (xturn Handler + Accumulator)
-        │
+        |
    Pipeline / Engine          <- drain every whole packet, then re-arm
-        │
+        |
  Connection | DatagramServer  <- one process per stream, or one per UDP listen socket
-        │
+        |
    Transport.*                <- :gen_tcp / :gen_udp / :ssl / :gen_sctp
+
+
+Host DTLS plaintext pipe (WebRTC data channels)
+        |
+   SctpAssociation            <- sans-IO ex_sctp; {:transmit, packets} back to DTLS
+        |
+   Sctp.Dcep                  <- channel Open/Ack on PPI 50
 ```
 
 Control-shaped traffic (requests, handshakes) goes through `Engine` and a `Handler`. High-rate media should use `Transport.UDP.open_relay/2` or a raw socket - not the drain loop.
@@ -25,8 +32,10 @@ Control-shaped traffic (requests, handshakes) goes through `Engine` and a `Handl
 | `Transport.TCP` | Stream listen/accept/connect |
 | `Transport.TLS` | TLS 1.2/1.3 over TCP |
 | `Transport.DTLS` | DTLS over UDP (connection-oriented accept) |
-| `Transport.SCTP` | Listen-only; `Acceptor` cannot `accept/2` |
-| `Xirsys.Sockets.Accumulator` | Behaviour: “is there a whole packet yet?” |
+| `Transport.SCTP` | Listen-only OTP `:gen_sctp`; `Acceptor` cannot `accept/2` |
+| `SctpAssociation` | WebRTC SCTP-over-DTLS (sans-IO `ex_sctp`); not a Transport |
+| `Sctp.Dcep` | DCEP Open/Ack encode and decode (RFC 8832) for data channels |
+| `Xirsys.Sockets.Accumulator` | Behaviour: "is there a whole packet yet?" |
 | `Accumulator.Raw` | One datagram / chunk = one packet |
 | `Accumulator.LengthPrefixed` | Size-prefixed stream framing |
 | `Accumulator.Reorder` | Hold out-of-order packets until a key window is contiguous |
@@ -49,7 +58,13 @@ Control-shaped traffic (requests, handshakes) goes through `Engine` and a `Handl
 
 **TCP / TLS / DTLS.** `Acceptor` listens, accepts, transfers ownership, then `Connection` runs the same engine. Stream bytes accumulate across reads; pipelined packets in one read are all dispatched.
 
-**SCTP.** `listen/3` works when OTP provides `:gen_sctp`. Associations need a custom owner - `Acceptor` returns `{:error, :sctp_not_supported}`.
+**SCTP.** `Transport.SCTP.listen/3` works when OTP provides `:gen_sctp`. Associations need a
+custom owner - `Acceptor` returns `{:error, :sctp_not_supported}`.
+
+**WebRTC data channels** use `Xirsys.Sockets.SctpAssociation` (SCTP inside DTLS application
+data via `ex_sctp`), not `Transport.SCTP`. The host feeds DTLS plaintext with `handle_packet/2`
+and must send every `{:transmit, packets}` event back on the DTLS socket. Channel setup uses
+`Sctp.Dcep` on PPI 50.
 
 Start `SockSupervisor` (and `TierSupervisor.Task` / `.Pool` if using async tiers) before listeners.
 

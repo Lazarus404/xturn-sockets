@@ -24,7 +24,25 @@
 
 defmodule Xirsys.Sockets.TierSupervisor do
   @moduledoc """
-  Dynamic supervisor for async pipeline tier sessions (`dispatch: :task` / `:pool`).
+  Dynamic supervisor for async pipeline tier session workers.
+
+  ## What problem this solves
+
+  Pipeline tiers configured with `dispatch: :task` or `:pool` run handler work in
+  separate `TierSession` processes so the owning `Connection` or `DatagramServer`
+  can keep relaying without blocking. This module is the generic
+  `DynamicSupervisor` that starts those workers.
+
+  Use `TierSupervisor.Task` or `TierSupervisor.Pool` for named instances with
+  appropriate child limits.
+
+  ## Internal note
+
+  OTP supervision only; tier handlers implement application protocol logic.
+
+  ## RFCs
+
+  - No STUN/TURN RFC; OTP supervision for async pipeline dispatch
   """
   use DynamicSupervisor
 

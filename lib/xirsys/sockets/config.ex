@@ -31,6 +31,18 @@ defmodule Xirsys.Sockets.Config do
 
   Set `config :xturn_sockets, config_app: :my_app` so `config :my_app, ...`
   overrides library defaults without copying every key.
+
+  ## What problem this solves
+
+  [XTurn](https://github.com/Lazarus404/xturn) deployments need tunable buffer
+  sizes, UDP session limits, reorder windows, and control-plane rate limits
+  without hard-coding constants in transport and engine modules.
+
+  ## RFCs
+
+  No STUN/TURN RFC; operational defaults for XTurn socket listeners.
+  Rate limiting is intended for control-plane STUN/TURN requests, not relayed
+  media (see `check_rate_limit/1`).
   """
 
   @rate_limit_window 60_000

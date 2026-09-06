@@ -24,9 +24,24 @@
 
 defmodule Xirsys.Sockets.TierSupervisor.Pool do
   @moduledoc """
-  Named pool supervisor for `dispatch: :pool` tiers.
+  Named pool supervisor for pipeline tiers with `dispatch: :pool`.
+
+  ## What problem this solves
+
+  High-rate descended tiers (for example RTP parsing) can overload the connection
+  process if run inline. `:pool` dispatch caps concurrent `TierSession` workers;
+  when the pool is full, descends are dropped (at-most-once) and telemetry
+  reports saturation.
 
   Caps children at `Config.tier_pool_size/0` unless `:max_children` is passed.
+
+  ## Internal note
+
+  Thin wrapper around `TierSupervisor` registered as `TierSupervisor.Pool`.
+
+  ## RFCs
+
+  - No STUN/TURN RFC; OTP supervision for bounded async tier workers
   """
 
   alias Xirsys.Sockets.{Config, TierSupervisor}

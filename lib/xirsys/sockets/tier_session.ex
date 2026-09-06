@@ -28,6 +28,20 @@ defmodule Xirsys.Sockets.TierSession do
 
   Started by `Engine` when a tier uses `dispatch: :task` or `dispatch: :pool`.
   Messages are `{:push, payload, meta}` casts from the parent connection.
+
+  **Internal API.** Spawned by the drain engine; not part of the public
+  application surface for host apps.
+
+  ## What problem this solves
+
+  Heavy or isolatable pipeline tiers (for example media processing) must not
+  block the connection process. Each async tier gets its own GenServer with
+  private accumulator state while replies still route through the parent
+  transport.
+
+  ## RFCs
+
+  No STUN/TURN RFC; framing/dispatch infrastructure for XTurn listeners.
   """
   use GenServer
 

@@ -24,10 +24,22 @@
 
 defmodule Xirsys.Sockets.Transport.TCP do
   @moduledoc """
-  Plain TCP transport (`:gen_tcp`).
+  Plain TCP transport (`:gen_tcp`) for TURN-over-TCP and outbound clients.
 
-  IPv6 listen sockets on Linux set `ipv6_v6only`. `connect/3` is implemented
-  for outbound TCP.
+  ## What problem this solves
+
+  TURN can run over TCP (pt.4 of RFC 5766 / RFC 8656). Stream transports need
+  listen/accept, byte-oriented reads, and normalized `{:tcp, ...}` messages for
+  the shared drain engine. This module implements the `Transport` behaviour on
+  top of `:gen_tcp`, including optional outbound `connect/3`.
+
+  IPv6 listen sockets on Linux set `ipv6_v6only`.
+
+  ## RFCs
+
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) - TURN (TCP allocations)
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (updated TCP usage)
+  - [RFC 6062](https://www.rfc-editor.org/rfc/rfc6062) - TURN TCP relay (ConnectionBind)
   """
   @behaviour Xirsys.Sockets.Transport
 

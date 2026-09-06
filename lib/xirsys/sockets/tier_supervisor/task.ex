@@ -24,7 +24,21 @@
 
 defmodule Xirsys.Sockets.TierSupervisor.Task do
   @moduledoc """
-  Named supervisor for `dispatch: :task` tiers (unbounded by default).
+  Named supervisor for pipeline tiers with `dispatch: :task`.
+
+  ## What problem this solves
+
+  Some descended tiers should run asynchronously without a hard concurrency cap.
+  `:task` dispatch lazily starts one `TierSession` per tier per owner under this
+  supervisor (unbounded by default via `:max_children` `:infinity`).
+
+  ## Internal note
+
+  Thin wrapper around `TierSupervisor` registered as `TierSupervisor.Task`.
+
+  ## RFCs
+
+  - No STUN/TURN RFC; OTP supervision for async tier workers
   """
 
   alias Xirsys.Sockets.TierSupervisor

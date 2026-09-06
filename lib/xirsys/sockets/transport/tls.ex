@@ -24,12 +24,23 @@
 
 defmodule Xirsys.Sockets.Transport.TLS do
   @moduledoc """
-  TLS stream transport (`:ssl`).
+  TLS stream transport (`:ssl`) for TURNS listeners and connections.
+
+  ## What problem this solves
+
+  Browsers and native clients often require TURN over TLS (TURNS). This module
+  wraps OTP `:ssl` behind the `Transport` behaviour: secure listen defaults,
+  handshake on accept, and normalized `{:ssl, ...}` messages for the drain loop.
 
   Defaults to TLS 1.2/1.3 and AEAD cipher suites. Legacy versions (`:tlsv1`,
   `:"tlsv1.1"`, `:sslv3`) are stripped from `:versions`. Certificates come from
   `listen/3` opts (`certfile`, `keyfile`, `cacertfile`), then `Config.get(:certs)`,
   then legacy `:certs` / `:xturn` application env.
+
+  ## RFCs
+
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (TLS as transport)
+  - [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446) - TLS 1.3 (handshake and record layer)
   """
   @behaviour Xirsys.Sockets.Transport
 

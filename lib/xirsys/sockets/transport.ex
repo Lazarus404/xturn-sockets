@@ -31,6 +31,25 @@ defmodule Xirsys.Sockets.Transport do
   `:gen_udp` / `:ssl` directly.
 
   Optional callbacks: `peername/1`, `controlling_process/2`, `connect/3`.
+
+  ## What problem this solves
+
+  [XTurn](https://github.com/Lazarus404/xturn) listeners bind several wire
+  protocols. Each OTP driver exposes different APIs and `handle_info/2` message
+  shapes. This behaviour gives acceptors, datagram servers, connections, and the
+  drain engine one surface for listen/accept/send/setopts and for normalizing
+  inbound messages into `{:data, binary(), from()}` events.
+
+  ## RFCs
+
+  This layer moves bytes; STUN/TURN parsing lives in the host application.
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN over UDP and TCP)
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) / [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) (TURN relay transports)
+  - [RFC 8445](https://www.rfc-editor.org/rfc/rfc8445) (ICE; transport selection)
+  - [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) (TCP stream framing)
+  - [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446) (TLS over TCP)
+  - [RFC 9147](https://www.rfc-editor.org/rfc/rfc9147) (DTLS over UDP)
   """
 
   @typedoc "Opaque socket handle returned by the underlying driver."

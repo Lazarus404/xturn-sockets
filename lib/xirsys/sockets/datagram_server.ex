@@ -26,8 +26,23 @@ defmodule Xirsys.Sockets.DatagramServer do
   @moduledoc """
   Datagram listener that drains every whole packet from each inbound datagram.
 
-  Default transport is `Transport.UDP`. Multi-tier pipelines can keep per-peer
-  session state; otherwise each datagram is framed independently.
+  ## What problem this solves
+
+  STUN/TURN over UDP delivers one or more logical messages per datagram. A single
+  GenServer owns the listen socket, arms active-once reads, and runs the shared
+  `Engine` drain loop so coalesced packets in one datagram are all dispatched
+  before the next receive. Multi-tier pipelines can keep per-peer session state;
+  otherwise each datagram is framed independently.
+
+  Default transport is `Transport.UDP`. Use `socket/1` and `endpoint/1` when a
+  reply must leave a different local endpoint (RFC 5780 CHANGE-REQUEST).
+
+  ## RFCs
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) - STUN (UDP Binding)
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) - TURN (UDP Allocate)
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (updated UDP usage)
+  - [RFC 5780](https://www.rfc-editor.org/rfc/rfc5780) - NAT discovery (alternate reply socket)
   """
   use GenServer
   require Logger

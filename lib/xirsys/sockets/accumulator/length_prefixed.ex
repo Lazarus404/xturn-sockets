@@ -29,6 +29,18 @@ defmodule Xirsys.Sockets.Accumulator.LengthPrefixed do
   The popped packet is the body only (header is stripped). Multiple packets
   in one `push/3` are drained by repeated `pop/1`.
 
+  ## What problem this solves
+
+  TCP and TLS deliver a byte stream with no message boundaries. A length prefix
+  (configurable width and endianness) lets the engine split the stream into
+  discrete packets before handlers run.
+
+  ## RFCs
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN over TCP; 2-byte length, pt. 6)
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) / [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) (TURN ChannelData 4-byte length)
+  - [RFC 9293](https://www.rfc-editor.org/rfc/rfc9293) (TCP byte-stream transport)
+
   ## Options
 
     * `:header_size` - header width in bytes (default: `2`)

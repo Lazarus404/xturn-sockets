@@ -27,6 +27,18 @@ defmodule Xirsys.Sockets.Spec do
   Normalizes `{module, opts}` or a bare `module` into `{module, opts}`.
 
   Used by `Pipeline` when a tier names an accumulator.
+
+  **Internal API.** Host applications declare accumulators in `tier/2`; they do
+  not call this module directly.
+
+  ## What problem this solves
+
+  Pipeline tiers accept either `MyAccumulator` or `{MyAccumulator, opts}` in
+  source. One resolver keeps compile-time and runtime paths consistent.
+
+  ## RFCs
+
+  No STUN/TURN RFC; framing/dispatch infrastructure for XTurn listeners.
   """
 
   @type spec :: module() | {module(), keyword()}

@@ -31,6 +31,18 @@ defmodule Xirsys.Sockets.Accumulator.Reorder do
   starting at the first key observed. Packets tagged `:unordered` skip the
   reorder buffer.
 
+  ## What problem this solves
+
+  UDP and relay paths can deliver packets out of order. Wrapping an inner
+  accumulator with sequence keys lets a tier release contiguous packets to the
+  handler while bounding latency and buffer size.
+
+  ## RFCs
+
+  No STUN/TURN RFC; optional sequencing helper for relay or media tiers.
+  Sequence numbers may mirror [RFC 3550](https://www.rfc-editor.org/rfc/rfc3550)
+  (RTP) when `key_fun/2` extracts them, but this module does not parse RTP.
+
   ## Options
 
     * `:inner` - inner accumulator module (default: `Accumulator.Raw`)

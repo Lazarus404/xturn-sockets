@@ -26,8 +26,18 @@ defmodule Xirsys.Sockets.Transport.SCTP do
   @moduledoc """
   SCTP transport (`:gen_sctp`) when the OTP driver is available.
 
-  `accept/2` returns `{:error, :sctp_not_supported}`: associations arrive as
-  messages on the listen socket and cannot be driven by `Acceptor`'s accept loop.
+  ## What problem this solves
+
+  Some deployments listen for SCTP over IP directly via OTP's `:gen_sctp`. This
+  module implements the `Transport` behaviour for that path: bind, send on stream
+  0, and normalize `{:sctp, ...}` messages.
+
+  **Not** WebRTC SCTP-over-DTLS; see `SctpAssociation` for the sans-IO path used
+  with DTLS application data.
+
+  `accept/2` always returns `{:error, :sctp_not_supported}` because associations
+  arrive as messages on the listen socket and cannot be driven by `Acceptor`'s
+  accept loop.
 
       iex> Xirsys.Sockets.Transport.SCTP.framing()
       :datagram
@@ -35,6 +45,10 @@ defmodule Xirsys.Sockets.Transport.SCTP do
       {:data, "hi", {{127, 0, 0, 1}, 9}}
       iex> Xirsys.Sockets.Transport.SCTP.handle_message({:sctp_closed, :sock}, :sock)
       {:closed, :normal}
+
+  ## RFCs
+
+  - [RFC 4960](https://www.rfc-editor.org/rfc/rfc4960) - SCTP (streams, associations)
   """
   @behaviour Xirsys.Sockets.Transport
 

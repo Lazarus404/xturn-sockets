@@ -42,13 +42,32 @@ defmodule Xirsys.Sockets.Pipeline do
 
   `Acceptor` / `DatagramServer` also accept the legacy `{accumulator, handler}`
   pair, which `resolve/1` turns into a single-tier pipeline.
+
+  ## What problem this solves
+
+  [XTurn](https://github.com/Lazarus404/xturn) listeners peel protocol layers
+  (for example STUN length framing, then TURN channel data) before handing work
+  to handlers. A compile-time `tier/2` macro records each layer's accumulator,
+  handler, and dispatch mode so acceptors resolve a single runtime `%Pipeline{}`.
+
+  ## RFCs
+
+  No STUN/TURN RFC; framing/dispatch infrastructure for XTurn listeners.
+  Host handlers implement [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) /
+  [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) parsing above this layer.
   """
 
   alias Xirsys.Sockets.{Config, Conn, Pipeline.Tier, Spec}
 
   defstruct tiers: nil
 
-  @typedoc "Compiled pipeline: a map of tier name to `Pipeline.Tier`."
+  @typedoc """
+  Compiled pipeline resolved from a module or legacy pair.
+
+  ## Fields
+
+  * `:tiers` - map of tier name atom to `%Xirsys.Sockets.Pipeline.Tier{}`
+  """
   @type t :: %__MODULE__{tiers: %{atom() => Tier.t()}}
 
   @doc """

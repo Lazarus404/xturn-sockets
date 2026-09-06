@@ -24,9 +24,24 @@
 
 defmodule Xirsys.Sockets.SockSupervisor do
   @moduledoc """
-  Dynamic supervisor for `Connection` processes.
+  Dynamic supervisor for per-connection `Connection` processes.
+
+  ## What problem this solves
+
+  Each accepted TCP/TLS/DTLS client needs an isolated process with its own
+  accumulator state and drain loop. `SockSupervisor` is a `DynamicSupervisor`
+  that starts `Connection` children on demand from `Acceptor`.
 
   Start this before `Acceptor`. Tests typically call `start_link/0` once.
+
+  ## Internal note
+
+  OTP supervision only; no wire protocol logic lives here.
+
+  ## RFCs
+
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (one client session per connection)
+  - No STUN/TURN RFC for OTP supervision
   """
   use DynamicSupervisor
 

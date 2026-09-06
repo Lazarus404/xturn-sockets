@@ -35,6 +35,17 @@ defmodule Xirsys.Sockets.Pipeline.Tier do
       :inline
       iex> tier.pool_size
       nil
+
+  ## What problem this solves
+
+  Each pipeline layer needs a frozen snapshot of which accumulator module,
+  handler module, and dispatch strategy (`:inline`, `:task`, or `:pool`) the
+  engine will use at runtime. `%Tier{}` is that snapshot after compile-time
+  `tier/2` expansion.
+
+  ## RFCs
+
+  No STUN/TURN RFC; framing/dispatch infrastructure for XTurn listeners.
   """
 
   @enforce_keys [:accumulator, :accumulator_opts, :handler]
@@ -49,13 +60,17 @@ defmodule Xirsys.Sockets.Pipeline.Tier do
   ]
 
   @typedoc """
-  Runtime tier record.
+  Runtime tier record produced by `Pipeline.tier/2`.
 
-    * `accumulator` / `accumulator_opts` - framing module and its `init/1` opts
-    * `handler` - `Xirsys.Sockets.Handler` implementation
-    * `dispatch` - `:inline` (same process), `:task`, or `:pool`
-    * `pool_size` - max pool children when `dispatch: :pool` (`nil` uses config)
-    * `task_supervisor` / `pool_supervisor` - named DynamicSupervisors
+  ## Fields
+
+  * `:accumulator` - `Xirsys.Sockets.Accumulator` module for this tier
+  * `:accumulator_opts` - keyword list passed to `accumulator.init/1`
+  * `:handler` - `Xirsys.Sockets.Handler` implementation module
+  * `:dispatch` - `:inline` (same process), `:task`, or `:pool`
+  * `:pool_size` - max pool children when `dispatch: :pool`; `nil` uses config
+  * `:task_supervisor` - named supervisor for `dispatch: :task`
+  * `:pool_supervisor` - named supervisor for `dispatch: :pool`
   """
   @type t :: %__MODULE__{
           accumulator: module(),

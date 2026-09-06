@@ -24,11 +24,24 @@
 
 defmodule Xirsys.Sockets.Transport.UDP do
   @moduledoc """
-  UDP transport (`:gen_udp`).
+  UDP transport (`:gen_udp`) for STUN/TURN listeners and relay data paths.
 
-  `listen/3` opens a client-facing socket. `open_relay/2` opens a short-lived
-  relay socket (active-once, large buffers, ICMP error queue on Linux).
-  IPv6 sockets on Linux set `ipv6_v6only`.
+  ## What problem this solves
+
+  STUN Binding and TURN over UDP arrive as connectionless datagrams. This module
+  wraps `:gen_udp` behind the `Transport` behaviour: bind and listen, normalize
+  `{:udp, ...}` / ICMP error messages, and expose helpers for high-rate relay
+  sockets (`open_relay/2`) outside the drain loop.
+
+  `listen/3` opens a client-facing socket (passive until the owner arms active).
+  `open_relay/2` opens a relay socket (active-once, large buffers, ICMP error
+  queue on Linux). IPv6 listen sockets on Linux set `ipv6_v6only`.
+
+  ## RFCs
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) - STUN (UDP transport)
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) - TURN (UDP relay)
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (updated UDP usage)
   """
   @behaviour Xirsys.Sockets.Transport
 

@@ -24,10 +24,22 @@
 
 defmodule Xirsys.Sockets.Acceptor do
   @moduledoc """
-  Accept loop for connection-oriented transports (TCP, TLS).
+  Accept loop for connection-oriented transports (TCP, TLS, DTLS).
 
-  Each accepted socket is started under `SockSupervisor` as a `Connection`.
+  ## What problem this solves
+
+  TURN-over-TCP and TURNS need a long-lived listener that accepts client
+  connections and hands each socket to a dedicated `Connection` process under
+  `SockSupervisor`. This GenServer listens, accepts with a timeout, transfers
+  socket ownership, then re-arms `{active, :once}` on the child so TLS 1.3
+  application data is not delivered to the acceptor.
+
   `Transport.SCTP.accept/2` is not supported by this loop.
+
+  ## RFCs
+
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (client/server over TCP/TLS)
+  - No STUN/TURN RFC for accept loops; OTP process supervision applies
   """
   use GenServer
   require Logger

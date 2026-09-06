@@ -30,6 +30,22 @@ defmodule Xirsys.Sockets.Accumulator do
   `Xirsys.Sockets.Accumulator.LengthPrefixed`, and
   `Xirsys.Sockets.Accumulator.Reorder`.
 
+  ## What problem this solves
+
+  Stream and datagram transports deliver arbitrary byte chunks. Before a handler
+  runs, something must decide when a logical packet is complete. Each pipeline
+  tier owns an accumulator that buffers input via `push/3` and yields whole
+  packets from `pop/1`.
+
+  ## RFCs
+
+  Accumulators implement wire framing, not STUN/TURN semantics:
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN message length on TCP, pt. 6)
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) / [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) (TURN ChannelData length fields)
+
+  Choose `LengthPrefixed` or `Raw` to match the tier's on-the-wire layout.
+
   ## Bounded buffers
 
   Every implementation should accept a `:max_size` option that limits how much

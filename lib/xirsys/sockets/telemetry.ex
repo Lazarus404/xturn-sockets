@@ -29,6 +29,17 @@ defmodule Xirsys.Sockets.Telemetry do
   `emit/3` no-ops when `config :xturn_sockets, telemetry_enabled: false`, and
   swallows errors if `:telemetry` is not started. `attach_handlers/0` installs
   library log/counter handlers; callers may attach their own instead.
+
+  ## What problem this solves
+
+  Operators running [XTurn](https://github.com/Lazarus404/xturn) need
+  connection counts, byte totals, rate-limit hits, and SSL handshake outcomes
+  without instrumenting every transport module by hand. This module centralizes
+  emit helpers, default handlers, and coarse health heuristics.
+
+  ## RFCs
+
+  No STUN/TURN RFC; operational telemetry for XTurn socket listeners.
   """
 
   require Logger

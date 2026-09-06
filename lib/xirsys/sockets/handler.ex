@@ -35,6 +35,23 @@ defmodule Xirsys.Sockets.Handler do
     * `{:reply, iodata(), state}` - send `iodata` on the same connection
     * `{:descend, tier, payload, state}` - push `payload` into another named tier
     * `{:close, state}` - stop the connection after this packet
+
+  ## What problem this solves
+
+  After an accumulator yields a whole packet, something must interpret it.
+  [XTurn](https://github.com/Lazarus404/xturn) and host applications implement
+  this behaviour per tier so STUN binding, TURN allocation, and relay logic stay
+  out of the generic drain engine.
+
+  ## RFCs
+
+  Handlers typically implement protocol logic from:
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN)
+  - [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) / [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) (TURN)
+  - [RFC 8445](https://www.rfc-editor.org/rfc/rfc8445) (ICE; optional STUN/TURN usage)
+
+  This behaviour only defines the callback contract; it does not parse messages.
   """
 
   alias Xirsys.Sockets.Conn

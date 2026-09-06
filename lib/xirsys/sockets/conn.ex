@@ -34,16 +34,35 @@ defmodule Xirsys.Sockets.Conn do
       3478
       iex> conn.assigns
       %{}
+
+  ## What problem this solves
+
+  Handler callbacks need peer and local 5-tuple data plus caller metadata without
+  exposing raw socket ownership. `%Conn{}` is the stable read-only view
+  [XTurn](https://github.com/Lazarus404/xturn) handlers use for logging,
+  rate limits, and reply routing.
+
+  ## RFCs
+
+  Addresses and ports align with ICE/STUN/TURN endpoint identifiers:
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN server reflexive / mapped address)
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) (TURN 5-tuple allocation)
+  - [RFC 8445](https://www.rfc-editor.org/rfc/rfc8445) (ICE candidate transport address)
   """
 
   @typedoc """
-  Connection context.
+  Connection context passed to `Xirsys.Sockets.Handler` callbacks.
 
-    * `listener` - `Acceptor` / `DatagramServer` pid, if any
-    * `socket` - opaque transport socket
-    * `client_ip` / `client_port` - peer (updated per datagram on UDP)
-    * `server_ip` / `server_port` - local bind address
-    * `assigns` - caller-supplied map, unchanged by the engine
+  ## Fields
+
+  * `:listener` - `Acceptor` or `DatagramServer` pid, if any
+  * `:socket` - opaque transport socket handle
+  * `:client_ip` - peer IP; updated per datagram on UDP
+  * `:client_port` - peer port; updated per datagram on UDP
+  * `:server_ip` - local bind IP
+  * `:server_port` - local bind port
+  * `:assigns` - caller-supplied map; unchanged by the engine
   """
   @type t :: %__MODULE__{
           listener: pid() | nil,

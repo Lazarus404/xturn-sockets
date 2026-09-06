@@ -24,12 +24,24 @@
 
 defmodule Xirsys.Sockets.Transport.DTLS do
   @moduledoc """
-  DTLS datagram transport. Delegates to `Transport.TLS` with `protocol: :dtls`.
+  DTLS datagram transport for TURN and WebRTC-style secure datagram listeners.
+
+  ## What problem this solves
+
+  TURN and WebRTC stacks use DTLS over UDP for encrypted datagram channels.
+  This module is a thin `Transport` adapter: it delegates to `Transport.TLS` with
+  `protocol: :dtls`, reports `:datagram` framing, and reuses TLS certificate and
+  cipher defaults.
 
       iex> Xirsys.Sockets.Transport.DTLS.framing()
       :datagram
       iex> Xirsys.Sockets.Transport.DTLS.handle_message({:ssl, :port, "hi"}, :sock)
       {:data, "hi", nil}
+
+  ## RFCs
+
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (DTLS as transport)
+  - [RFC 9147](https://www.rfc-editor.org/rfc/rfc9147) - DTLS 1.3 (datagram record layer)
   """
   @behaviour Xirsys.Sockets.Transport
 

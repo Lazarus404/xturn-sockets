@@ -26,6 +26,17 @@ defmodule Xirsys.Sockets.Accumulator.Raw do
   @moduledoc """
   No framing: each `push/3` is one immediately poppable packet.
 
+  ## What problem this solves
+
+  Datagram transports (UDP, DTLS) and inner tiers that already receive whole
+  payloads need no length header parsing. Each read or descend push becomes one
+  handler packet.
+
+  ## RFCs
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN over UDP; one datagram per message)
+  - [RFC 9147](https://www.rfc-editor.org/rfc/rfc9147) (DTLS datagram payloads)
+
   ## Options
 
     * `:max_size` - maximum queued whole packets (default: `1024`)

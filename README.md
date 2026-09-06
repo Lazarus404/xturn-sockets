@@ -1,7 +1,29 @@
 # XTurn Sockets
 
-A format-agnostic Elixir socket library with pluggable packet framing and a single reusable
-drain engine for UDP, TCP, TLS, DTLS, and SCTP (listen-only; see below).
+Format-agnostic Elixir socket library with pluggable packet framing and a single reusable
+drain engine for UDP, TCP, TLS, DTLS, and SCTP (listen-only; see below). Used by
+[XTurn](https://github.com/Lazarus404/xturn) for STUN/TURN listeners and relay I/O.
+
+Real-time servers (TURN, SIP, custom protocols) need the same plumbing on every transport:
+listen or accept, read bytes or datagrams, detect message boundaries, and dispatch to
+application handlers without re-implementing GenServer loops per protocol. XTurn Sockets
+provides `Transport`, `Accumulator`, and `Handler` behaviours plus a shared `Engine` that
+fully drains each read before re-arming the socket. Control-plane traffic (STUN/TURN) runs
+through the drain loop; high-rate media can bypass it via `Transport.UDP.open_relay/2`.
+
+## RFCs
+
+- [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) - STUN (UDP/TCP Binding, integrity)
+- [RFC 5766](https://www.rfc-editor.org/rfc/rfc5766) - TURN (Allocate, permissions, channels)
+- [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) - TURN (updated specification, TLS/DTLS)
+- [RFC 5780](https://www.rfc-editor.org/rfc/rfc5780) - NAT discovery (alternate UDP reply socket)
+- [RFC 6062](https://www.rfc-editor.org/rfc/rfc6062) - TURN TCP relay (ConnectionBind)
+- [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446) - TLS 1.3 (TURNS)
+- [RFC 9147](https://www.rfc-editor.org/rfc/rfc9147) - DTLS 1.3
+- [RFC 4960](https://www.rfc-editor.org/rfc/rfc4960) - SCTP
+- [RFC 8261](https://www.rfc-editor.org/rfc/rfc8261) - SCTP over DTLS
+- [RFC 8831](https://www.rfc-editor.org/rfc/rfc8831) - WebRTC data channels
+- [RFC 8832](https://www.rfc-editor.org/rfc/rfc8832) - DCEP
 
 ## Features
 
@@ -15,8 +37,12 @@ drain engine for UDP, TCP, TLS, DTLS, and SCTP (listen-only; see below).
 **Control vs data:** route request-shaped traffic through `Engine` / `Handler`. High-rate
 media belongs on `UDP.open_relay/2` or a raw socket - not through the drain loop.
 
-**SCTP:** `listen/3` works when OTP provides `:gen_sctp`. `Acceptor` cannot drive SCTP
-(`accept/2` returns `{:error, :sctp_not_supported}`); associations need a custom owner.
+**SCTP:**
+
+- `Transport.SCTP` - OTP `:gen_sctp` over IP (listen-only; `Acceptor` cannot `accept/2`).
+- `SctpAssociation` - WebRTC SCTP-over-DTLS (sans-IO via `ex_sctp`). Caller owns the DTLS
+  byte pipe (`handle_packet/2` in, `{:transmit, packets}` out). Requires a Rust toolchain
+  to compile `ex_sctp`.
 
 **Supervision:** start `SockSupervisor` and (if using async tiers) `TierSupervisor.Task` /
 `TierSupervisor.Pool` in your application before listeners. `DatagramServer` is one process
@@ -27,7 +53,7 @@ per listen socket.
 ```elixir
 def deps do
   [
-    {:xturn_sockets, "~> 2.2"},
+    {:xturn_sockets, "~> 2.2.1"},
     {:telemetry, "~> 1.0"}
   ]
 end
@@ -277,6 +303,12 @@ mix test
 ```
 
 ## Changelog
+
+### 2.2.1
+
+- `SctpAssociation` - WebRTC SCTP-over-DTLS association (sans-IO via Hex `ex_sctp`). Caller owns the DTLS byte pipe (`handle_packet/2` in, `{:transmit, packets}` out).
+- `Sctp.Dcep` - Data Channel Establishment Protocol Open/Ack encode and decode (RFC 8832).
+- Module docs aligned to required package shape (`## What problem this solves`, `## RFCs`, `@doc` / `@typedoc` / `## Fields`) across transports, pipeline, and supervisors.
 
 ### 2.2.0
 

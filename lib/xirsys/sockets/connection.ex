@@ -28,6 +28,21 @@ defmodule Xirsys.Sockets.Connection do
 
   Started by `Acceptor` via `SockSupervisor`. One process per accepted stream
   (TCP/TLS). Datagrams use `DatagramServer` instead.
+
+  **Internal API.** Started by the library acceptor; host applications normally
+  configure pipelines on listeners rather than starting this GenServer directly.
+
+  ## What problem this solves
+
+  Stream sockets need a dedicated process to hold per-connection accumulator and
+  handler state, re-arm `{active, N}` reads, and drain the full pipeline after
+  every chunk so partial STUN/TURN frames never stall the acceptor.
+
+  ## RFCs
+
+  - [RFC 8489](https://www.rfc-editor.org/rfc/rfc8489) (STUN over TCP/TLS)
+  - [RFC 8656](https://www.rfc-editor.org/rfc/rfc8656) (TURN over TCP/TLS)
+  - [RFC 8446](https://www.rfc-editor.org/rfc/rfc8446) (TLS-wrapped TURN/STUN)
   """
   use GenServer
 

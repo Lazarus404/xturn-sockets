@@ -4,7 +4,7 @@ defmodule Xirsys.XTurn.Sockets.MixProject do
   def project do
     [
       app: :xturn_sockets,
-      version: "2.2.0",
+      version: "2.2.1",
       elixir: "~> 1.15",
       elixirc_paths: elixirc_paths(Mix.env()),
       build_embedded: Mix.env() == :prod,
@@ -30,6 +30,8 @@ defmodule Xirsys.XTurn.Sockets.MixProject do
   defp deps do
     [
       {:telemetry, "~> 1.0"},
+      # WebRTC SCTP-over-DTLS (sans-IO). Requires a Rust toolchain to compile.
+      {:ex_sctp, "~> 0.1"},
       {:benchee, "~> 1.3", only: :dev},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false}
     ]

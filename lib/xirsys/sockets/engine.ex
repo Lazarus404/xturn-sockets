@@ -28,6 +28,20 @@ defmodule Xirsys.Sockets.Engine do
 
   `Connection` and `DatagramServer` call `push_and_drain/9` after each read.
   `drain/8` is used for timer ticks (reorder timeouts) without a new chunk.
+
+  **Internal API.** Used by `Xirsys.Sockets.Connection`, `DatagramServer`, and
+  `TierSession`; not part of the public application surface for host apps.
+
+  ## What problem this solves
+
+  Socket reads can carry partial frames, multiple frames, or nested protocol
+  layers. The engine pushes bytes into accumulators, drains every complete
+  packet, runs handlers, sends replies, and follows `{:descend, tier, ...}`
+  into other tiers (inline or async) until the accumulator needs more data.
+
+  ## RFCs
+
+  No STUN/TURN RFC; framing/dispatch infrastructure for XTurn listeners.
   """
   require Logger
 
