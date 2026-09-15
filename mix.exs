@@ -15,7 +15,7 @@ defmodule Xirsys.XTurn.Sockets.MixProject do
       homepage_url: "https://xturn.me",
       package: package(),
       docs: [
-        extras: ["README.md", "LICENSE.md"],
+        extras: ["README.md", "LICENSE.md", "CHANGELOG.md"],
         main: "readme"
       ]
     ]
@@ -42,10 +42,17 @@ defmodule Xirsys.XTurn.Sockets.MixProject do
 
   defp package do
     %{
-      files: ["lib", "mix.exs", "README.md", "LICENSE.md", "config"],
+      files: [
+        "lib",
+        "mix.exs",
+        "README.md",
+        "LICENSE.md",
+        "CHANGELOG.md",
+        "config"
+      ],
       maintainers: ["Jahred Love"],
       licenses: ["Apache-2.0"],
-      links: %{"Github" => "https://github.com/Lazarus404/xturn-sockets"}
+      links: %{"GitHub" => "https://github.com/Lazarus404/xturn-sockets"}
     }
   end
 end

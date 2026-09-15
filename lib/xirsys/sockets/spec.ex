@@ -41,6 +41,9 @@ defmodule Xirsys.Sockets.Spec do
   No STUN/TURN RFC; framing/dispatch infrastructure for XTurn listeners.
   """
 
+  @typedoc """
+  Accumulator (or other) module, optionally with keyword options.
+  """
   @type spec :: module() | {module(), keyword()}
 
   @doc """
